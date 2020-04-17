@@ -17,3 +17,9 @@
                                      --hypoxemia_window 10
                                      --prediction_window 5
    ```
+6. Train dynamic prediction
+   ```
+   python train_dynamic_predictor.py --hypoxemia_threshhold 90
+                                     --hypoxemia_window 10
+                                     --prediction_window 5
+   ```
