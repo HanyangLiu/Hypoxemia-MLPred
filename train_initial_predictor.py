@@ -5,6 +5,7 @@ from file_config.config import config
 from utils.utility_preprocess import PatientFilter, LabelAssignment, DataImputation
 from sklearn.model_selection import train_test_split
 from sklearn import preprocessing, metrics
+from sklearn.decomposition import PCA
 from imblearn.metrics import sensitivity_specificity_support
 from xgboost import XGBClassifier
 import matplotlib.pyplot as plt
@@ -46,7 +47,7 @@ def prepare_data(df_static_file, df_dynamic_file, feature_file, args):
     selected_idx = subgroup_pids
     X = static_feature.iloc[selected_idx, 1:].values
     y = static_label.loc[selected_idx, 'label'].values
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, stratify=y)
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, stratify=y)
 
     return X_train, X_test, y_train, y_test
 
@@ -65,7 +66,10 @@ def train_gbtree(X_train, y_train, X_test, y_test):
                           )
     eval_set = [(X_test, y_test)]
     eval_metric = ["aucpr"]
-    model.fit(X_train, y_train, verbose=True)
+    model.fit(X_train, y_train,
+              # eval_metric=eval_metric,
+              # eval_set=eval_set,
+              verbose=True)
     print('Done.')
 
     return model

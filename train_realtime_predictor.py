@@ -94,15 +94,18 @@ def train_gbtree(X_train, y_train):
     print('Training model...')
     model = XGBClassifier(objective='binary:logistic',
                           booster='gbtree',
-                          silent=False,
+                          # silent=False,
                           # learning_rate=0.2,
                           # n_estimators=1000,
                           # max_depth=6,
-                          # verbosity=2,
+                          # verbosity=2
                           )
     eval_set = [(X_test, y_test)]
     eval_metric = ["aucpr"]
-    model.fit(X_train, y_train, verbose=True)
+    model.fit(X_train, y_train,
+              # eval_metric=eval_metric,
+              # eval_set=eval_set,
+              verbose=True)
     print('Done.')
 
     return model
@@ -112,6 +115,8 @@ def evaluate(model, X_test, y_test):
     # Testing
     y_pred = model.predict(X_test)
     probs = model.predict_proba(X_test)[:, 1]
+    np.savetxt('data/result/y_prob', probs)
+    np.savetxt('data/result/y_test', y_test)
 
     # Evaluation
     fpr, tpr, _ = metrics.roc_curve(y_test, probs)

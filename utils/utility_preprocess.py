@@ -8,6 +8,7 @@ from sklearn.impute import SimpleImputer, MissingIndicator
 import tsfresh.feature_extraction.feature_calculators as ts
 from sklearn import preprocessing
 from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.decomposition import PCA
 import tsfresh
 import sys
 
@@ -324,8 +325,13 @@ class FeatureExtraction:
             procedure_corpus = df_static['ScheduledProcedure'].astype('|S').values
             vectorizer = CountVectorizer()
             vecs = vectorizer.fit_transform(procedure_corpus).toarray()
-            df_corpus = pd.DataFrame(vecs)
 
+            # Use PCA to condense BOW into lower-dimentional vectors
+            pca = PCA(0.95)
+            pca.fit(vecs)
+            vecs = pca.transform(vecs)
+
+            df_corpus = pd.DataFrame(vecs)
             df = pd.concat([df, df_corpus], axis=1, sort=False)
 
         return df

@@ -23,7 +23,7 @@ def feature_extraction(df_static, df_dynamic, feat_dir):
     print('Extracting static and real-time features...')
     extractor = FeatureExtraction(feature_window=5)
     df_static_features = extractor.gen_static_features(df_static, if_text=True)
-    df_dynamic_features = extractor.gen_ewm_dynamic_features(df_static, df_dynamic, if_text=False)
+    df_dynamic_features = extractor.gen_ewm_dynamic_features(df_static, df_dynamic, if_text=True)
     print('Done static and real-time feature extraction!')
     # save file
     print('Saving to files...')
@@ -46,9 +46,9 @@ if __name__ == '__main__':
 
     print('Imputation:', args.if_impute)
     if args.if_impute == 'True':
-        feat_dir = 'data/features/dynamic_feature.csv'
+        feat_dir = 'data/features/dynamic_feature_PCA.csv'
     else:
-        feat_dir = 'data/features/dynamic_feature_not_imputed.csv'
+        feat_dir = 'data/features/dynamic_feature_not_imputed_PCA.csv'
 
     df_static, df_dynamic = imputation(df_static, df_dynamic)
     feature_extraction(df_static, df_dynamic, feat_dir)

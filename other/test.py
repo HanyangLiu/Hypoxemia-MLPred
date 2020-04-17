@@ -2,7 +2,6 @@ import os
 import pandas as pd
 import numpy as np
 from file_config.config import config
-from utils.utility_preprocess import add_label
 from tsfresh import extract_features, select_features, extract_relevant_features
 from tsfresh.utilities.dataframe_functions import impute
 from datetime import datetime
@@ -25,15 +24,15 @@ from tsfresh.examples.robot_execution_failures import download_robot_execution_f
 #####
 
 
-ticker = 'AMD'
-timeframe = '1y'
-df = p.chartDF(ticker, timeframe)
-df = df[['close']]
-df.reset_index(level=0, inplace=True)
-df.columns=['ds','y']
-plt.plot(df.ds, df.y)
-plt.show()
-
+# ticker = 'AMD'
+# timeframe = '1y'
+# df = p.chartDF(ticker, timeframe)
+# df = df[['close']]
+# df.reset_index(level=0, inplace=True)
+# df.columns=['ds','y']
+# plt.plot(df.ds, df.y)
+# plt.show()
+#
 
 
 # is_meanbp_nan = np.isnan(df_dynamic['MeanBP'].values)
@@ -77,3 +76,9 @@ plt.show()
 # #                                                                   axis=0)
 # df_dynamic.loc[is_not_null, ['is_noninv_dense']] = 1
 # df_dynamic.loc[df_dynamic['is_noninv_dense'] == 0, noninv_column] = 0
+
+
+y_test = np.loadtxt('../data/result/y_test')
+y_prob = np.loadtxt('../data/result/y_prob')
+
+a=1
