@@ -23,9 +23,9 @@
                                      --hypoxemia_window 10
                                      --prediction_window 5
    ```
-6. Train dynamic prediction using extracted features
+6. Train real-time prediction using extracted features
    ```
-   python train_dynamic_predictor.py --hypoxemia_threshhold 90
+   python train_realtime_predictor.py --hypoxemia_threshhold 90
                                      --hypoxemia_window 10
                                      --prediction_window 5
    ```
