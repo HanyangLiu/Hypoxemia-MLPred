@@ -2,12 +2,13 @@
 
 ## Usage
 1. Edit directories in "file_config/data.conf".
-2. Make directories in folder "data", and then load raw data files into "data/raw_data".
+2. Make directories in folder "data":
    ```
    cd data
    mkdir raw_data data_frame features model result
    cd ..
    ```
+   Then load raw data files into "data/raw_data". Make sure it contains the following three files/folders: demographic.csv, ICD.csv, vitals/2019_06_27_Mon*.csv.
 3. Generate DataFrame from raw data
    ```
    python gen_dataframe.py
