@@ -7,17 +7,17 @@
    ```
    python gen_dataframe.py
    ```
-4. Extract static and realtime features
+4. Extract static and realtime features from generated DataFrame
    ```
    python feature_extraction.py --if_impute True/False
    ```
-5. Train initial prediction
+5. Train initial prediction using extracted features
    ```
    python train_initial_predictor.py --hypoxemia_threshhold 90
                                      --hypoxemia_window 10
                                      --prediction_window 5
    ```
-6. Train dynamic prediction
+6. Train dynamic prediction using extracted features
    ```
    python train_dynamic_predictor.py --hypoxemia_threshhold 90
                                      --hypoxemia_window 10
