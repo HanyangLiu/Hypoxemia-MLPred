@@ -26,6 +26,6 @@
 6. Train real-time prediction using extracted features
    ```
    python train_realtime_predictor.py --hypoxemia_threshhold 90
-                                     --hypoxemia_window 10
-                                     --prediction_window 5
+                                      --hypoxemia_window 10
+                                      --prediction_window 5
    ```
