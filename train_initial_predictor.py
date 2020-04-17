@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 from file_config.config import config
 from utils.utility_preprocess import PatientFilter, LabelAssignment, DataImputation
+from utils.utility_analysis import plot_roc, plot_prc, line_search_best_metric
 from sklearn.model_selection import train_test_split
 from sklearn import preprocessing, metrics
 from sklearn.decomposition import PCA
@@ -76,57 +77,28 @@ def train_gbtree(X_train, y_train, X_test, y_test):
 
 
 def evaluate(model, X_test, y_test):
-
     # Testing
-    y_pred = model.predict(X_test)
-    probs = model.predict_proba(X_test)[:, 1]
+    y_prob = model.predict_proba(X_test)[:, 1]
+    np.savetxt('data/result/y_prob', y_prob)
+    np.savetxt('data/result/y_test', y_test)
 
     # Evaluation
-    fpr, tpr, _ = metrics.roc_curve(y_test, probs)
-    prec, rec, _ = metrics.precision_recall_curve(y_test, probs)
-
-    C = metrics.confusion_matrix(y_test, y_pred)
-    tn = np.float(C[0][0])
-    fn = np.float(C[1][0])
-    tp = np.float(C[1][1])
-    fp = np.float(C[0][1])
-
-    sensitivity = tp / (tp + fn)
-    specificity = tn / (tn + fp)
-    precision = tp / (tp + fp)
-    f1 = metrics.f1_score(y_test, y_pred)
-    acc = metrics.accuracy_score(y_test, y_pred)
+    fpr, tpr, _ = metrics.roc_curve(y_test, y_prob)
+    prec, rec, _ = metrics.precision_recall_curve(y_test, y_prob)
+    sensitivity, specificity, PPV, NPV, f1, acc = line_search_best_metric(y_test, y_prob, spec_thresh=0.95)
 
     print('Evaluation of test set:')
     print("AU-ROC:", "%0.4f" % metrics.auc(fpr, tpr), "AU-PRC:", "%0.4f" % metrics.auc(rec, prec))
     print("sensitivity:", "%0.4f" % sensitivity,
           "specificity:", "%0.4f" % specificity,
-          "precision:", "%0.4f" % precision,
+          "PPV:", "%0.4f" % PPV,
+          "NPV:", "%0.4f" % NPV,
           "F1 score:", "%0.4f" % f1,
           "accuracy:", "%0.4f" % acc)
 
-    plt.figure(0)
-    plt.title('Receiver Operating Characteristic')
-    plt.plot(fpr, tpr, 'b', label='AUC = %0.2f' % metrics.auc(fpr, tpr))
-    plt.legend(loc='lower right')
-    plt.plot([0, 1], [0, 1], 'r--')
-    plt.xlim([0, 1])
-    plt.ylim([0, 1])
-    plt.ylabel('True Positive Rate')
-    plt.xlabel('False Positive Rate')
-    plt.show()
-    plt.savefig('data/result/roc_initial.png')
-
-    plt.figure(1)
-    plt.title('Precision Recall Curve')
-    plt.plot(rec, prec, 'b', label='AUC = %0.2f' % metrics.auc(rec, prec))
-    plt.legend(loc='lower right')
-    plt.xlim([0, 1])
-    plt.ylim([0, 1])
-    plt.ylabel('Precision')
-    plt.xlabel('Recall')
-    plt.show()
-    plt.savefig('data/result/pr_initial.png')
+    # plot ROC and PRC
+    plot_roc(fpr, tpr, 'data/result/roc_initial.png')
+    plot_prc(rec, prec, 'data/result/pr_initial.png')
 
 
 if __name__ == "__main__":

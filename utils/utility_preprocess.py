@@ -276,6 +276,13 @@ class FeatureExtraction:
         return df_data
 
     def gen_ewm_dynamic_features(self, df_static, df_dynamic, if_text):
+        '''
+        Extracting exponentially weighted moving average/variance features.
+        :param df_static:
+        :param df_dynamic:
+        :param if_text:
+        :return:
+        '''
 
         num_feat = len(self.feat_use)
         dynamic_columns = df_dynamic.columns
