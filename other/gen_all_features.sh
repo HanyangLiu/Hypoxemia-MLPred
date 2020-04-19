@@ -5,9 +5,12 @@ export PYTHONPATH
 
 cd ..
 
-python feature_extraction.py --if_impute True --static_txt bow --dynamic_txt notxt
-python feature_extraction.py --if_impute True --static_txt rbow-pca --dynamic_txt rbow
-python feature_extraction.py --if_impute False --static_txt bow --dynamic_txt notxt
-python feature_extraction.py --if_impute False --static_txt rbow --dynamic_txt rbow
+python feature_extraction.py --type static --static_txt bow
+python feature_extraction.py --type static --static_txt rbow
+
+python feature_extraction.py --type dynamic --if_impute True --dynamic_txt notxt
+#python feature_extraction.py --type dynamic --if_impute True --dynamic_txt rbow
+python feature_extraction.py --type dynamic --if_impute False --dynamic_txt notxt
+#python feature_extraction.py --type dynamic --if_impute False --dynamic_txt rbow
 
 

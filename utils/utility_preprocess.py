@@ -238,42 +238,33 @@ class FeatureExtraction:
 
         return [E, S, ro, skewness, kurtosis, trend, mean, min, max]
 
-    def gen_stat_dynamic_features(self, df_dynamic):
+    def gen_stat_dynamic_features(self, df_static, df_dynamic, feat_type):
         # TODO: need to be fixed
 
-        df_data = pd.DataFrame(columns=self.stat_feature_columns + ['index', 'pid', 'ts'])
         pids = df_dynamic['pid'].unique()
         num_pid = len(pids)
 
+        all_features = []
         for ind_static, pid in enumerate(pids):
             print_str = str(ind_static) + '/' + str(num_pid) + '---' + str(ind_static / num_pid * 100)[0:4] + '%'
             sys.stdout.write('\r' + print_str)
             df = df_dynamic[df_dynamic['pid'] == pid]
-            feature_list = []
-
+            feat_vecs = []
             for ind_df, time in enumerate(df['ts'].values):
                 if ind_df < self.feature_window - 1:
-                    continue
-                feat_list = []
+                    feat_vec = [df['index'].values[ind_df], pid, time] + list(np.zeros(len(self.stat_feature_columns)))
+                else:
+                    feat_vec = [df['index'].values[ind_df], pid, time]
+                    for feature_name in self.feat_use:
+                        time_series = df[feature_name].values[ind_df - self.feature_window + 1: ind_df + 1]
+                        feat_vec += self.get_stat_features(time_series)
+                feat_vecs.append(feat_vec)
+            all_features += feat_vecs
+        df_feat = pd.DataFrame(np.array(all_features), columns=['index', 'pid', 'ts'] + self.stat_feature_columns)
+        df_feat = df_feat.reindex(['index', 'pid', 'ts'] + self.stat_feature_columns, axis=1)
+        df_feat = pd.merge(df_feat, self.gen_static_features(df_static, feat_type=feat_type), on='pid')
 
-                for feature_name in self.feat_use:
-                    time_series = df[feature_name].values[ind_df - self.feature_window + 1: ind_df + 1]
-                    feat_list += self.get_stat_features(time_series)
-
-                feature_list.append(feat_list)
-
-            if feature_list == []:
-                continue
-
-            df_feat = pd.DataFrame(np.array(feature_list), columns=self.stat_feature_columns)
-            df_feat = df_feat.assign(index=df['index'].values[self.feature_window - 1:],
-                                     pid=df['pid'].values[self.feature_window - 1:],
-                                     ts=df['ts'].values[self.feature_window - 1:])
-            df_data = df_data.append(df_feat, ignore_index=True)
-
-        df_data = df_data.reindex(['index', 'pid', 'ts'] + self.stat_feature_columns, axis=1)
-
-        return df_data
+        return df_feat
 
     def gen_ewm_dynamic_features(self, df_static, df_dynamic, feat_type):
         '''
