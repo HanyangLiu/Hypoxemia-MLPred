@@ -18,7 +18,7 @@ def imputation(df_static, df_dynamic):
 
 def feature_extraction(df_static, df_dynamic, type):
     # Feature extraction
-    print('Extracting static and real-time features...')
+    print('Extracting features...')
     extractor = FeatureExtraction(feature_window=5)
     if type == 'static':
         df_static_features = extractor.gen_static_features(df_static, feat_type=args.static_txt)
@@ -33,11 +33,10 @@ def feature_extraction(df_static, df_dynamic, type):
         df_dynamic_features.to_csv(ewm_feat_file, index=False)
         print('Done!')
     if type == 'dynamic-sta':
-        df_dynamic_features = extractor.gen_stat_dynamic_features(df_static, df_dynamic, feat_type=args.dynamic_txt)
+        extractor.gen_stat_dynamic_features(df_static, df_dynamic,
+                                                                  sta_feat_file,
+                                                                  feat_type=args.dynamic_txt)
         print('Done real-time feature extraction!')
-        print('Saving to files:', sta_feat_file)
-        df_dynamic_features.to_csv(sta_feat_file, index=False)
-        print('Done!')
 
 
 if __name__ == '__main__':
@@ -53,6 +52,7 @@ if __name__ == '__main__':
     df_static_file = config.get('processed', 'df_static_file')
     df_dynamic_file = config.get('processed', 'df_dynamic_file')
 
+    # save name
     token_impute = 'imp' if args.if_impute == 'True' else 'nonimp'
     static_feature_file = 'data/features/static-' + args.static_txt + '.csv'
     ewm_feat_file = 'data/features/dynamic-ewm-' + args.dynamic_txt + '-' + token_impute + '.csv'
@@ -62,6 +62,7 @@ if __name__ == '__main__':
     df_static = pd.read_csv(df_static_file)
     df_dynamic = pd.read_csv(df_dynamic_file)
 
+    # feature extraction
     df_static, df_dynamic = imputation(df_static, df_dynamic)
     feature_extraction(df_static, df_dynamic, type=args.type)
 

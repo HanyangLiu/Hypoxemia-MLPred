@@ -190,11 +190,11 @@ class FeatureExtraction:
         feat_name = ['invDiastolic', 'invMeanBP', 'invSystolic', 'HR', 'Diastolic', 'MeanBP', 'Systolic', 'SpO2',
                      'Pulse', 'ETCO2', 'Temp', 'coreTemp']
         self.feat_use = feat_name
-        self.stat_feature_columns = self._get_stat_feature_columns()
-        self.ewm_feature_columns = self._get_ewm_feature_columns()
+        self.sta_feature_columns = self.get_stat_feature_columns()
+        self.ewm_feature_columns = self.get_ewm_feature_columns()
         self.feature_window = feature_window
 
-    def _get_ewm_feature_columns(self):
+    def get_ewm_feature_columns(self):
 
         feature_columns = []
         ewm_name = ['Last', 'min', 'max', 'EWMA-6s', 'EWMA-1m', 'EWMA-5m', 'EWMA-10m', 'EWMV-5m', 'EWMV-10']
@@ -205,7 +205,7 @@ class FeatureExtraction:
 
         return feature_columns
 
-    def _get_stat_feature_columns(self):
+    def get_stat_feature_columns(self):
 
         feature_columns = []
         stat_name = ['E', 'S', 'ro', 'skewness', 'kurtosis', 'trend', 'mean', 'min', 'max']
@@ -216,55 +216,74 @@ class FeatureExtraction:
 
         return feature_columns
 
-    def cal_trend(self, data):
-        time_list = np.arange(len(data))
-        # create linear regression object
-        regr = linear_model.LinearRegression()
-        regr.fit(time_list.reshape(-1, 1), np.array(data).reshape(-1, 1))
+    def get_sta_features(self, data):
+        '''
+        Calculate the value of 9 kinds of selected statistical features
+        :param data:
+        :return:
+        '''
 
-        return regr.coef_[0][0]
+        def _cal_trend(data):
+            time_list = np.arange(len(data))
+            # create linear regression object
+            regr = linear_model.LinearRegression()
+            regr.fit(time_list.reshape(-1, 1), np.array(data).reshape(-1, 1))
 
-    def get_stat_features(self, data):
+            return regr.coef_[0][0]
 
         E = ts.abs_energy(data)
         S = ts.binned_entropy(data, max_bins=5)
         ro = ts.autocorrelation(data, lag=4)
         skewness = ts.skewness(data)
         kurtosis = ts.kurtosis(data)
-        trend = self.cal_trend(data)
+        trend = _cal_trend(data)
         mean = ts.mean(data)
         min = ts.minimum(data)
         max = ts.maximum(data)
 
         return [E, S, ro, skewness, kurtosis, trend, mean, min, max]
 
-    def gen_stat_dynamic_features(self, df_static, df_dynamic, feat_type):
-        # TODO: need to be fixed
+    def gen_stat_dynamic_features(self, df_static, df_dynamic, sta_feat_file, feat_type):
+        '''
+        Generate statistical features
+        :param sta_feat_file:
+        :param df_static:
+        :param df_dynamic:
+        :param feat_type:
+        :return:
+        '''
 
         pids = df_dynamic['pid'].unique()
         num_pid = len(pids)
+        df_init = pd.DataFrame(data=None, columns=['index', 'pid', 'ts'] + self.sta_feature_columns)
+        df_init.to_csv(sta_feat_file, index=False)
 
-        all_features = []
         for ind_static, pid in enumerate(pids):
             print_str = str(ind_static) + '/' + str(num_pid) + '---' + str(ind_static / num_pid * 100)[0:4] + '%'
             sys.stdout.write('\r' + print_str)
             df = df_dynamic[df_dynamic['pid'] == pid]
             feat_vecs = []
-            for ind_df, time in enumerate(df['ts'].values):
+            for ind_df, index in enumerate(df['index'].values):
                 if ind_df < self.feature_window - 1:
-                    feat_vec = [df['index'].values[ind_df], pid, time] + list(np.zeros(len(self.stat_feature_columns)))
+                    feat_vec = list(np.zeros(len(self.sta_feature_columns)))
                 else:
-                    feat_vec = [df['index'].values[ind_df], pid, time]
+                    feat_vec = []
                     for feature_name in self.feat_use:
                         time_series = df[feature_name].values[ind_df - self.feature_window + 1: ind_df + 1]
-                        feat_vec += self.get_stat_features(time_series)
+                        feat_vec += self.get_sta_features(time_series)
                 feat_vecs.append(feat_vec)
-            all_features += feat_vecs
-        df_feat = pd.DataFrame(np.array(all_features), columns=['index', 'pid', 'ts'] + self.stat_feature_columns)
-        df_feat = df_feat.reindex(['index', 'pid', 'ts'] + self.stat_feature_columns, axis=1)
-        df_feat = pd.merge(df_feat, self.gen_static_features(df_static, feat_type=feat_type), on='pid')
+            df_feat = pd.DataFrame(data=np.array(feat_vecs), columns=self.sta_feature_columns)
+            df_feat = pd.concat([df[['index', 'pid', 'ts']], df_feat], axis=1)
+            df_feat.to_csv(sta_feat_file, mode='a', header=False)
 
-        return df_feat
+        # normalization
+        df_feat = pd.read_csv(sta_feat_file)
+        min_max_scaler = preprocessing.MinMaxScaler()
+        X = df_feat[['ts'] + self.sta_feature_columns].values
+        df_feat[['ts'] + self.sta_feature_columns] = min_max_scaler.fit_transform(X)
+
+        df_feat = pd.merge(df_feat, self.gen_static_features(df_static, feat_type=feat_type), on='pid')
+        df_feat.to_csv(sta_feat_file, index=False)
 
     def gen_ewm_dynamic_features(self, df_static, df_dynamic, feat_type):
         '''

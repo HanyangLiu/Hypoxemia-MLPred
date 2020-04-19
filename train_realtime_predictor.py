@@ -147,13 +147,13 @@ if __name__ == "__main__":
     parser.add_argument('--hypoxemia_window', type=int, default=10)
     parser.add_argument('--prediction_window', type=int, default=5)
     parser.add_argument('--filter_mode', type=str, default='exclude')
-    parser.add_argument('--dynamic_feature_file', type=str, default='data/features/dynamic_feature.csv')
+    parser.add_argument('--dynamic_feature_file', type=str, default='dynamic-ewm-notxt-imp.csv')
     args = parser.parse_args()
     print(args)
 
     X_train, X_test, y_train, y_test = prepare_data(df_static_file=config.get('processed', 'df_static_file'),
                                                     df_dynamic_file=config.get('processed', 'df_dynamic_file'),
-                                                    feature_file=args.dynamic_feature_file)
+                                                    feature_file='data/features/' + args.dynamic_feature_file)
     model = train_gbtree(X_train, y_train)
     pickle.dump(model, open(config.get('processed', 'realtime_model_file'), 'wb'))
     evaluate(model, X_test, y_test)
