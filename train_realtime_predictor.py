@@ -45,6 +45,7 @@ def prepare_data(df_static_file, df_dynamic_file, feature_file):
     pid_train, pid_test, _, _ = train_test_split(static_label.loc[subgroup_pids]['pid'].values,
                                                  static_label.loc[subgroup_pids]['label'].values,
                                                  test_size=0.1,
+                                                 random_state=0,
                                                  stratify=static_label.loc[subgroup_pids]['label'].values)
     pid_train = sorted(list(pid_train))
     pid_test = sorted(list(pid_test))
@@ -123,14 +124,17 @@ def evaluate(model, X_test, y_test):
     prec, rec, _ = metrics.precision_recall_curve(y_test, y_prob)
     sensitivity, specificity, PPV, NPV, f1, acc = line_search_best_metric(y_test, y_prob, spec_thresh=0.95)
 
+    print('--------------------------------------------')
     print('Evaluation of test set:')
-    print("AU-ROC:", "%0.4f" % metrics.auc(fpr, tpr), "AU-PRC:", "%0.4f" % metrics.auc(rec, prec))
+    print("AU-ROC:", "%0.4f" % metrics.auc(fpr, tpr),
+          "AU-PRC:", "%0.4f" % metrics.auc(rec, prec))
     print("sensitivity:", "%0.4f" % sensitivity,
           "specificity:", "%0.4f" % specificity,
           "PPV:", "%0.4f" % PPV,
           "NPV:", "%0.4f" % NPV,
           "F1 score:", "%0.4f" % f1,
           "accuracy:", "%0.4f" % acc)
+    print('--------------------------------------------')
 
     # plot ROC and PRC
     plot_roc(fpr, tpr, 'data/result/roc_initial.png')
@@ -142,19 +146,14 @@ if __name__ == "__main__":
     parser.add_argument('--hypoxemia_thresh', type=int, default=90)
     parser.add_argument('--hypoxemia_window', type=int, default=10)
     parser.add_argument('--prediction_window', type=int, default=5)
-    parser.add_argument('--if_impute', type=str, default='True')
     parser.add_argument('--filter_mode', type=str, default='exclude')
+    parser.add_argument('--dynamic_feature_file', type=str, default='data/features/dynamic_feature.csv')
     args = parser.parse_args()
     print(args)
 
-    if args.if_impute == 'True':
-        feat_dir = 'data/features/dynamic_feature.csv'
-    else:
-        feat_dir = 'data/features/dynamic_feature_not_imputed.csv'
-
     X_train, X_test, y_train, y_test = prepare_data(df_static_file=config.get('processed', 'df_static_file'),
                                                     df_dynamic_file=config.get('processed', 'df_dynamic_file'),
-                                                    feature_file=feat_dir)
+                                                    feature_file=args.dynamic_feature_file)
     model = train_gbtree(X_train, y_train)
     pickle.dump(model, open(config.get('processed', 'realtime_model_file'), 'wb'))
     evaluate(model, X_test, y_test)

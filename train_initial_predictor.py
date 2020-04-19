@@ -48,7 +48,10 @@ def prepare_data(df_static_file, df_dynamic_file, feature_file, args):
     selected_idx = subgroup_pids
     X = static_feature.iloc[selected_idx, 1:].values
     y = static_label.loc[selected_idx, 'label'].values
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, stratify=y)
+    X_train, X_test, y_train, y_test = train_test_split(X, y,
+                                                        test_size=0.2,
+                                                        random_state=0,
+                                                        stratify=y)
 
     return X_train, X_test, y_train, y_test
 
@@ -87,14 +90,17 @@ def evaluate(model, X_test, y_test):
     prec, rec, _ = metrics.precision_recall_curve(y_test, y_prob)
     sensitivity, specificity, PPV, NPV, f1, acc = line_search_best_metric(y_test, y_prob, spec_thresh=0.95)
 
+    print('--------------------------------------------')
     print('Evaluation of test set:')
-    print("AU-ROC:", "%0.4f" % metrics.auc(fpr, tpr), "AU-PRC:", "%0.4f" % metrics.auc(rec, prec))
+    print("AU-ROC:", "%0.4f" % metrics.auc(fpr, tpr),
+          "AU-PRC:", "%0.4f" % metrics.auc(rec, prec))
     print("sensitivity:", "%0.4f" % sensitivity,
           "specificity:", "%0.4f" % specificity,
           "PPV:", "%0.4f" % PPV,
           "NPV:", "%0.4f" % NPV,
           "F1 score:", "%0.4f" % f1,
           "accuracy:", "%0.4f" % acc)
+    print('--------------------------------------------')
 
     # plot ROC and PRC
     plot_roc(fpr, tpr, 'data/result/roc_initial.png')
@@ -107,11 +113,12 @@ if __name__ == "__main__":
     parser.add_argument('--hypoxemia_thresh', type=int, default=90)
     parser.add_argument('--hypoxemia_window', type=int, default=10)
     parser.add_argument('--prediction_window', type=int, default=5)
+    parser.add_argument('--static_feature_file', type=str, default='data/features/static_bow.csv')
     args = parser.parse_args()
 
     X_train, X_test, y_train, y_test = prepare_data(df_static_file=config.get('processed', 'df_static_file'),
                                                     df_dynamic_file=config.get('processed', 'df_dynamic_file'),
-                                                    feature_file=config.get('processed', 'static_feature_file'),
+                                                    feature_file=args.static_feature_file,
                                                     args=args)
     model = train_gbtree(X_train, y_train, X_test, y_test)
     pickle.dump(model, open(config.get('processed', 'initial_model_file'), 'wb'))

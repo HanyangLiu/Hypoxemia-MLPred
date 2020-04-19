@@ -11,47 +11,48 @@ def imputation(df_static, df_dynamic):
     print('Imputing missing values...')
     imputer = DataImputation()
     df_static = imputer.impute_static_dataframe(df_static)
-    if args.if_impute == 'True':
-        df_dynamic = imputer.impute_dynamic_dataframe(df_dynamic)
+    df_dynamic = imputer.impute_dynamic_dataframe(df_dynamic) if args.if_impute == 'True' else df_dynamic
     print('Done!')
 
     return df_static, df_dynamic
 
 
-def feature_extraction(df_static, df_dynamic, feat_dir):
+def feature_extraction(df_static, df_dynamic):
     # Feature extraction
     print('Extracting static and real-time features...')
     extractor = FeatureExtraction(feature_window=5)
-    df_static_features = extractor.gen_static_features(df_static, if_text=True)
-    df_dynamic_features = extractor.gen_ewm_dynamic_features(df_static, df_dynamic, if_text=True)
+    df_static_features = extractor.gen_static_features(df_static, feat_type=args.static_txt)
+    df_dynamic_features = extractor.gen_ewm_dynamic_features(df_static, df_dynamic, feat_type=args.dynamic_txt)
     print('Done static and real-time feature extraction!')
     # save file
-    print('Saving to files...')
+    print('Saving to files:\n', static_feature_file, '\n', dynamic_feature_file)
     df_static_features.to_csv(static_feature_file, index=False)
-    df_dynamic_features.to_csv(feat_dir, index=False)
+    df_dynamic_features.to_csv(dynamic_feature_file, index=False)
     print('Done!')
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='feature extraction')
     parser.add_argument('--if_impute', type=str, default='True')
+    parser.add_argument('--static_txt', type=str, default='bow')
+    parser.add_argument('--dynamic_txt', type=str, default='notxt')
     args = parser.parse_args()
+    print(args)
+
     # path
     df_static_file = config.get('processed', 'df_static_file')
     df_dynamic_file = config.get('processed', 'df_dynamic_file')
-    static_feature_file = config.get('processed', 'static_feature_file')
+
+    token_impute = 'imp' if args.if_impute == 'True' else 'nonimp'
+    static_feature_file = 'data/features/static-' + args.static_txt + '.csv'
+    dynamic_feature_file = 'data/features/dynamic-' + args.dynamic_txt + '-' + token_impute + '.csv'
+
     # load DataFrame real-time data
     df_static = pd.read_csv(df_static_file)
     df_dynamic = pd.read_csv(df_dynamic_file)
 
-    print('Imputation:', args.if_impute)
-    if args.if_impute == 'True':
-        feat_dir = 'data/features/dynamic_feature_PCA.csv'
-    else:
-        feat_dir = 'data/features/dynamic_feature_not_imputed_PCA.csv'
-
     df_static, df_dynamic = imputation(df_static, df_dynamic)
-    feature_extraction(df_static, df_dynamic, feat_dir)
+    feature_extraction(df_static, df_dynamic)
 
 
 

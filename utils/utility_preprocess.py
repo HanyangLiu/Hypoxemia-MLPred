@@ -275,12 +275,12 @@ class FeatureExtraction:
 
         return df_data
 
-    def gen_ewm_dynamic_features(self, df_static, df_dynamic, if_text):
+    def gen_ewm_dynamic_features(self, df_static, df_dynamic, feat_type):
         '''
         Extracting exponentially weighted moving average/variance features.
         :param df_static:
         :param df_dynamic:
-        :param if_text:
+        :param feat_type:
         :return:
         '''
 
@@ -313,11 +313,11 @@ class FeatureExtraction:
             df_dummy = df_dynamic[dummy_columns]
             df = pd.concat([df, df_dummy], axis=1, sort=False)
 
-        df = pd.merge(df, self.gen_static_features(df_static, if_text), on='pid')
+        df = pd.merge(df, self.gen_static_features(df_static, feat_type=feat_type), on='pid')
 
         return df
 
-    def gen_static_features(self, df_static, if_text):
+    def gen_static_features(self, df_static, feat_type):
 
         static_feat_use = ['pid', 'AGE', 'TimeOfDay', 'AnesthesiaDuration', 'ASA', 'if_Eergency', 'HEIGHT', 'WEIGHT',
                            'Airway_1', 'Airway_1_Time', 'Airway_2', 'Airway_2_Time']
@@ -328,7 +328,17 @@ class FeatureExtraction:
         X = df[static_feat_use[1:]].values
         df[static_feat_use[1:]] = min_max_scaler.fit_transform(X)
 
-        if if_text:
+        # bag-of-words
+        if feat_type == 'bow':
+            procedure_corpus = df_static['ScheduledProcedure'].astype('|S').values
+            vectorizer = CountVectorizer()
+            vecs = vectorizer.fit_transform(procedure_corpus).toarray()
+
+            df_corpus = pd.DataFrame(vecs)
+            df = pd.concat([df, df_corpus], axis=1, sort=False)
+
+        # bag-of-words and reduced by PCA
+        elif feat_type == 'rbow':
             procedure_corpus = df_static['ScheduledProcedure'].astype('|S').values
             vectorizer = CountVectorizer()
             vecs = vectorizer.fit_transform(procedure_corpus).toarray()

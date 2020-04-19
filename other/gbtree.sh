@@ -6,6 +6,8 @@ export PYTHONPATH
 hypoxemia_window=10
 if_impute=True
 
+cd ..
+
 python gen_dataframe.py
 python feature_extraction.py --if_impute ${if_impute}
 python train_realtime_predictor.py --hypoxemia_window ${hypoxemia_window}
