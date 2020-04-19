@@ -28,15 +28,13 @@ def feature_extraction(df_static, df_dynamic, type):
         print('Done!')
     if type == 'dynamic-ewm':
         df_dynamic_features = extractor.gen_ewm_dynamic_features(df_static, df_dynamic, feat_type=args.dynamic_txt)
-        print('Done real-time feature extraction!')
+        print('Done real-time EWM feature extraction!')
         print('Saving to files:', ewm_feat_file)
         df_dynamic_features.to_csv(ewm_feat_file, index=False)
         print('Done!')
     if type == 'dynamic-sta':
-        extractor.gen_stat_dynamic_features(df_static, df_dynamic,
-                                                                  sta_feat_file,
-                                                                  feat_type=args.dynamic_txt)
-        print('Done real-time feature extraction!')
+        extractor.gen_stat_dynamic_features(df_static, df_dynamic, sta_feat_file, feat_type=args.dynamic_txt)
+        print('Done real-time statistical feature extraction!')
 
 
 if __name__ == '__main__':

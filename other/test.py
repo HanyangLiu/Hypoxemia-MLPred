@@ -82,3 +82,16 @@ y_test = np.loadtxt('../data/result/y_test')
 y_prob = np.loadtxt('../data/result/y_prob')
 
 a=1
+
+# for i, pid in enumerate(pid_train):
+#     s = str(i + 1) + '/' + str(num_train)
+#     sys.stdout.write('\r' + s)
+#     df = dynamic_label[dynamic_label['pid'] == pid]
+#     selected_idx_train += list(df[df['if_to_drop'] == 0]['index'].values)
+# print('\nGet test set index...')
+# for i, pid in enumerate(pid_test):
+#     s = str(i + 1) + '/' + str(num_test)
+#     sys.stdout.write('\r' + s)
+#     df = dynamic_label[dynamic_label['pid'] == pid]
+#     selected_idx_test += list(df[df['if_to_drop'] == 0]['index'].values)
+# print('\nDone.')

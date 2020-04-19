@@ -9,6 +9,7 @@ import tsfresh.feature_extraction.feature_calculators as ts
 from sklearn import preprocessing
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.decomposition import PCA
+from tqdm import tqdm, trange, tnrange
 import tsfresh
 import sys
 
@@ -217,11 +218,11 @@ class FeatureExtraction:
         return feature_columns
 
     def get_sta_features(self, data):
-        '''
+        """
         Calculate the value of 9 kinds of selected statistical features
         :param data:
         :return:
-        '''
+        """
 
         def _cal_trend(data):
             time_list = np.arange(len(data))
@@ -244,55 +245,62 @@ class FeatureExtraction:
         return [E, S, ro, skewness, kurtosis, trend, mean, min, max]
 
     def gen_stat_dynamic_features(self, df_static, df_dynamic, sta_feat_file, feat_type):
-        '''
+        """
         Generate statistical features
         :param sta_feat_file:
         :param df_static:
         :param df_dynamic:
         :param feat_type:
         :return:
-        '''
-
+        """
+        dynamic_columns = df_dynamic.columns
+        num_feat = len(self.feat_use)
         pids = df_dynamic['pid'].unique()
-        num_pid = len(pids)
         df_init = pd.DataFrame(data=None, columns=['index', 'pid', 'ts'] + self.sta_feature_columns)
         df_init.to_csv(sta_feat_file, index=False)
 
-        for ind_static, pid in enumerate(pids):
-            print_str = str(ind_static) + '/' + str(num_pid) + '---' + str(ind_static / num_pid * 100)[0:4] + '%'
-            sys.stdout.write('\r' + print_str)
-            df = df_dynamic[df_dynamic['pid'] == pid]
+        for pid in tqdm(pids):
+            df_current = df_dynamic[df_dynamic['pid'] == pid]
             feat_vecs = []
-            for ind_df, index in enumerate(df['index'].values):
+            for ind_df, index in enumerate(df_current['index'].values):
                 if ind_df < self.feature_window - 1:
                     feat_vec = list(np.zeros(len(self.sta_feature_columns)))
                 else:
                     feat_vec = []
                     for feature_name in self.feat_use:
-                        time_series = df[feature_name].values[ind_df - self.feature_window + 1: ind_df + 1]
+                        time_series = df_current[feature_name].values[ind_df - self.feature_window + 1: ind_df + 1]
                         feat_vec += self.get_sta_features(time_series)
                 feat_vecs.append(feat_vec)
-            df_feat = pd.DataFrame(data=np.array(feat_vecs), columns=self.sta_feature_columns)
-            df_feat = pd.concat([df[['index', 'pid', 'ts']], df_feat], axis=1)
-            df_feat.to_csv(sta_feat_file, mode='a', header=False)
+            name_arr = df_current[['index', 'pid', 'ts']].values
+            df = pd.DataFrame(data=np.concatenate([name_arr, np.array(feat_vecs)], axis=1),
+                              columns=['index', 'pid', 'ts'] + self.sta_feature_columns)
+            df.to_csv(sta_feat_file, mode='a', header=False, index=False)
 
         # normalization
-        df_feat = pd.read_csv(sta_feat_file)
+        df = pd.read_csv(sta_feat_file)
+        df = df.fillna(value=0)
         min_max_scaler = preprocessing.MinMaxScaler()
-        X = df_feat[['ts'] + self.sta_feature_columns].values
-        df_feat[['ts'] + self.sta_feature_columns] = min_max_scaler.fit_transform(X)
+        X = df[['ts'] + self.sta_feature_columns].values
+        df[['ts'] + self.sta_feature_columns] = min_max_scaler.fit_transform(X)
 
-        df_feat = pd.merge(df_feat, self.gen_static_features(df_static, feat_type=feat_type), on='pid')
-        df_feat.to_csv(sta_feat_file, index=False)
+        # for imputed data, add dummy columns
+        if len(dynamic_columns) > num_feat + 3:
+            dummy_columns = dynamic_columns[num_feat + 4:]
+            df_dummy = df_dynamic[dummy_columns]
+            df = pd.concat([df, df_dummy], axis=1, sort=False)
+
+        # add static features to each row
+        df = pd.merge(df, self.gen_static_features(df_static, feat_type=feat_type), on='pid')
+        df.to_csv(sta_feat_file, index=False)
 
     def gen_ewm_dynamic_features(self, df_static, df_dynamic, feat_type):
-        '''
+        """
         Extracting exponentially weighted moving average/variance features.
         :param df_static:
         :param df_dynamic:
         :param feat_type:
         :return:
-        '''
+        """
 
         num_feat = len(self.feat_use)
         dynamic_columns = df_dynamic.columns
@@ -323,11 +331,18 @@ class FeatureExtraction:
             df_dummy = df_dynamic[dummy_columns]
             df = pd.concat([df, df_dummy], axis=1, sort=False)
 
+        # add static features to each row
         df = pd.merge(df, self.gen_static_features(df_static, feat_type=feat_type), on='pid')
 
         return df
 
     def gen_static_features(self, df_static, feat_type):
+        """
+        Generate static features.
+        :param df_static:
+        :param feat_type:
+        :return:
+        """
 
         static_feat_use = ['pid', 'AGE', 'TimeOfDay', 'AnesthesiaDuration', 'ASA', 'if_Eergency', 'HEIGHT', 'WEIGHT',
                            'Airway_1', 'Airway_1_Time', 'Airway_2', 'Airway_2_Time']

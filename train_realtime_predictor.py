@@ -56,27 +56,15 @@ def prepare_data(df_static_file, df_dynamic_file, feature_file):
 
     del df_static, df_dynamic
 
-
     # select features with pid in subgroup as data matrix, and split into training and test set
-    selected_idx_train = []
-    selected_idx_test = []
-    num_train = len(pid_train)
-    num_test = len(pid_test)
-    print('Get training set index...')
-    for i, pid in enumerate(pid_train):
-        s = str(i + 1) + '/' + str(num_train)
-        sys.stdout.write('\r' + s)
-        df = dynamic_label[dynamic_label['pid'] == pid]
-        selected_idx_train += list(df[df['if_to_drop'] == 0]['index'].values)
-    print('\nGet test set index...')
-    for i, pid in enumerate(pid_test):
-        s = str(i + 1) + '/' + str(num_test)
-        sys.stdout.write('\r' + s)
-        df = dynamic_label[dynamic_label['pid'] == pid]
-        selected_idx_test += list(df[df['if_to_drop'] == 0]['index'].values)
-    print('\nDone.')
-
+    print('Training/testing split:', len(pid_train), '/', len(pid_test))
     print('Split into training and test set...')
+    to_keep = (dynamic_label['if_to_drop'] == 0).values
+    is_in_train = dynamic_label[['pid']].isin(pid_train)['pid'].values
+    is_in_test = dynamic_label[['pid']].isin(pid_test)['pid'].values
+    selected_idx_train = list(np.where(to_keep & is_in_train)[0])
+    selected_idx_test = list(np.where(to_keep & is_in_test)[0])
+
     X_train = dynamic_feature.iloc[selected_idx_train, 2:].values
     X_test = dynamic_feature.iloc[selected_idx_test, 2:].values
     y_train = dynamic_label.loc[selected_idx_train, 'label'].values

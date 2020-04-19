@@ -13,4 +13,4 @@ python feature_extraction.py --type dynamic-ewm --if_impute True --dynamic_txt n
 python feature_extraction.py --type dynamic-ewm --if_impute False --dynamic_txt notxt
 #python feature_extraction.py --type dynamic-ewm --if_impute False --dynamic_txt rbow
 
-
+python feature_extraction.py --type dynamic-sta
