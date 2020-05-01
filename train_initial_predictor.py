@@ -4,6 +4,8 @@ import numpy as np
 from file_config.config import config
 from utils.utility_preprocess import PatientFilter, LabelAssignment, DataImputation
 from utils.utility_analysis import plot_roc, plot_prc, line_search_best_metric
+from imblearn.over_sampling import SMOTE, ADASYN, RandomOverSampler
+from imblearn.under_sampling import RandomUnderSampler
 from sklearn.model_selection import train_test_split
 from sklearn import preprocessing, metrics
 from sklearn.decomposition import PCA
@@ -14,12 +16,7 @@ import argparse
 import pickle
 
 
-def prepare_data(df_static_file, df_dynamic_file, feature_file, args):
-
-    # load data
-    df_static = pd.read_csv(df_static_file)
-    df_dynamic = pd.read_csv(df_dynamic_file)
-    static_feature = pd.read_csv(feature_file)
+def prepare_data(df_static, df_dynamic, static_feature, args):
 
     # label assignment (according to imputed SpO2)
     print('Assigning labels...')
@@ -60,6 +57,7 @@ def train_gbtree(X_train, y_train, X_test, y_test):
 
     # Training
     print('Training model...')
+    X_train, y_train = RandomUnderSampler().fit_sample(np.nan_to_num(X_train), y_train)
     model = XGBClassifier(objective='binary:logistic',
                           booster='gbtree',
                           silent=False,
@@ -82,13 +80,11 @@ def train_gbtree(X_train, y_train, X_test, y_test):
 def evaluate(model, X_test, y_test):
     # Testing
     y_prob = model.predict_proba(X_test)[:, 1]
-    np.savetxt('data/result/y_prob', y_prob)
-    np.savetxt('data/result/y_test', y_test)
 
     # Evaluation
     fpr, tpr, _ = metrics.roc_curve(y_test, y_prob)
     prec, rec, _ = metrics.precision_recall_curve(y_test, y_prob)
-    sensitivity, specificity, PPV, NPV, f1, acc = line_search_best_metric(y_test, y_prob, spec_thresh=0.95)
+    (sensitivity, specificity, PPV, NPV, f1, acc), _ = line_search_best_metric(y_test, y_prob, spec_thresh=0.95)
 
     print('--------------------------------------------')
     print('Evaluation of test set:')
@@ -113,12 +109,12 @@ if __name__ == "__main__":
     parser.add_argument('--hypoxemia_thresh', type=int, default=90)
     parser.add_argument('--hypoxemia_window', type=int, default=10)
     parser.add_argument('--prediction_window', type=int, default=5)
-    parser.add_argument('--static_feature_file', type=str, default='data/features/static_bow.csv')
+    parser.add_argument('--static_feature_file', type=str, default='static-bow.csv')
     args = parser.parse_args()
 
-    X_train, X_test, y_train, y_test = prepare_data(df_static_file=config.get('processed', 'df_static_file'),
-                                                    df_dynamic_file=config.get('processed', 'df_dynamic_file'),
-                                                    feature_file=args.static_feature_file,
+    X_train, X_test, y_train, y_test = prepare_data(df_static=pd.read_csv(config.get('processed', 'df_static_file')),
+                                                    df_dynamic=pd.read_csv(config.get('processed', 'df_dynamic_file')),
+                                                    static_feature=pd.read_csv('data/features/' + args.static_feature_file),
                                                     args=args)
     model = train_gbtree(X_train, y_train, X_test, y_test)
     pickle.dump(model, open(config.get('processed', 'initial_model_file'), 'wb'))

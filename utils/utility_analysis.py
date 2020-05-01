@@ -29,8 +29,8 @@ def plot_roc(fpr, tpr, save_dir):
     plt.ylim([0, 1])
     plt.ylabel('True Positive Rate')
     plt.xlabel('False Positive Rate')
-    plt.show()
     plt.savefig(save_dir)
+    plt.show()
 
 
 def plot_prc(rec, prec, save_dir):
@@ -43,8 +43,8 @@ def plot_prc(rec, prec, save_dir):
     plt.ylim([0, 1])
     plt.ylabel('Precision')
     plt.xlabel('Recall')
-    plt.show()
     plt.savefig(save_dir)
+    plt.show()
 
 
 def metric_eval(y_test, y_pred):
@@ -66,13 +66,13 @@ def metric_eval(y_test, y_pred):
 
 
 def line_search_best_metric(y_test, y_prob, spec_thresh):
-    '''
+    """
     Line search the best threshold to balance the trade-off between sens/spec
     :param y_test:
     :param y_prob:
     :param spec_thresh:
     :return:
-    '''
+    """
 
     t = np.arange(0.0, 1.0, 0.01)
     diff = 1.0
@@ -83,7 +83,60 @@ def line_search_best_metric(y_test, y_prob, spec_thresh):
         if abs(spec - spec_thresh) < diff:
             best_t = t[i]
             best_metrics = (sens, spec, PPV, NPV, f1, acc)
+            y_pred = np.round(y_prob - dt)
             diff = abs(spec - 0.95)
 
-    return best_metrics
+    return best_metrics, y_pred
+
+
+def best_ntree_score(estimator, X):
+    """
+    This scorer uses the best_ntree_limit to return
+    the best y_prob
+    """
+    try:
+        y_prob = estimator.predict_proba(X, ntree_limit=estimator.best_ntree_limit)
+    except AttributeError:
+        y_prob = estimator.predict_proba(X)[:, 1]
+    return y_prob
+
+
+def count_correct_label(y_test, y_prob, win_size):
+    """
+    Analyze the correctly predicted label distribution
+    :param y_test:
+    :param y_pred:
+    :param win_size:
+    :return:
+    """
+    _, y_pred = line_search_best_metric(y_test, y_prob, spec_thresh=0.95)
+
+    idx_arr = np.where(y_test)[0]
+    horizon_arr = np.zeros(len(y_pred))
+    for i, y_idx in enumerate(idx_arr):
+        if i == len(idx_arr) - 1:
+            continue
+        if idx_arr[i + 1] != idx_arr[i] + 1:
+            try:
+                horizon_arr[y_idx - win_size + 1: y_idx + 1] = np.array(list(np.linspace(win_size, 1, win_size)))
+            except:
+                continue
+
+    counts_gt = []
+    for j in list(np.linspace(1, win_size, win_size)):
+        ids = np.where(horizon_arr == j)
+        count = np.sum([y_test[i] == 1 for i in ids])
+        counts_gt.append(count)
+    print('Groundtruth:', counts_gt)
+
+    counts = []
+    for j in list(np.linspace(1, win_size, win_size)):
+        ids = np.where(horizon_arr == j)
+        count = np.sum([y_pred[i] == 1 for i in ids])
+        counts.append(count)
+    print('Result:', counts)
+
+    return counts_gt, counts
+
+
 

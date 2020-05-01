@@ -25,7 +25,7 @@ def prepare_data(df_static, df_dynamic, dynamic_feature, args):
     label_assign = LabelAssignment(hypoxemia_thresh=args.hypoxemia_thresh,
                                    hypoxemia_window=args.hypoxemia_window,
                                    prediction_window=args.prediction_window)
-    static_label, dynamic_label = label_assign.assign_label(df_static, df_dynamic)
+    static_label, dynamic_label = label_assign.assign_multi_label(df_static, df_dynamic)
     positive_pids = label_assign.get_positive_pids(static_label)
     print('Done.')
 
@@ -85,8 +85,9 @@ def prepare_data(df_static, df_dynamic, dynamic_feature, args):
 def train_gbtree(X_train, y_train):
     # Training
     print('Training model...')
-    model = XGBClassifier(objective='binary:logistic',
+    model = XGBClassifier(objective='multi:softprob',
                           booster='gbtree',
+                          num_class=3
                           # silent=False,
                           # learning_rate=0.2,
                           # n_estimators=1000,
@@ -104,30 +105,17 @@ def train_gbtree(X_train, y_train):
 
 def evaluate(model, X_test, y_test):
     # Testing
-    y_prob = model.predict_proba(X_test)[:, 1]
-    np.savetxt('data/result/y_prob', y_prob)
-    np.savetxt('data/result/y_test', y_test)
-
-    # Evaluation
-    fpr, tpr, _ = metrics.roc_curve(y_test, y_prob)
-    prec, rec, _ = metrics.precision_recall_curve(y_test, y_prob)
-    (sensitivity, specificity, PPV, NPV, f1, acc), _ = line_search_best_metric(y_test, y_prob, spec_thresh=0.95)
+    y_pred = model.predict(X_test)
+    PPV = metrics.precision_score(y_test, y_pred, labels=[1, 2], average='micro')
+    sensitivity = metrics.recall_score(y_test, y_pred, labels=[1, 2], average='micro')
+    f1 = metrics.f1_score(y_test, y_pred, labels=[1, 2], average='micro')
 
     print('--------------------------------------------')
     print('Evaluation of test set:')
-    print("AU-ROC:", "%0.4f" % metrics.auc(fpr, tpr),
-          "AU-PRC:", "%0.4f" % metrics.auc(rec, prec))
     print("sensitivity:", "%0.4f" % sensitivity,
-          "specificity:", "%0.4f" % specificity,
           "PPV:", "%0.4f" % PPV,
-          "NPV:", "%0.4f" % NPV,
-          "F1 score:", "%0.4f" % f1,
-          "accuracy:", "%0.4f" % acc)
+          "F1 score:", "%0.4f" % f1)
     print('--------------------------------------------')
-
-    # plot ROC and PRC
-    plot_roc(fpr, tpr, 'data/result/roc_initial.png')
-    plot_prc(rec, prec, 'data/result/pr_initial.png')
 
 
 if __name__ == "__main__":

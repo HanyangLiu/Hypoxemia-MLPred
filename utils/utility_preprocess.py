@@ -78,6 +78,65 @@ class LabelAssignment:
 
         return static_label, dynamic_label
 
+    def assign_multi_label(self, df_static, df_dynamic):
+
+        win_hypo = self.hypoxemia_window
+        win_pred = self.prediction_window
+        SpO2_arr = df_dynamic['SpO2'].values
+        if_SpO2_recorded = df_dynamic['if_SpO2'].values
+        pid_arr = df_dynamic['pid'].values
+        ts_arr = df_dynamic['ts'].values
+
+        labels_static = np.zeros(len(df_static), dtype=bool)
+        labels_dynamic = np.zeros(len(SpO2_arr))
+
+        if_low_SpO2 = np.zeros(len(SpO2_arr), dtype=bool)
+        hypo_state = np.zeros(len(SpO2_arr))
+        if_to_drop = np.zeros(len(SpO2_arr), dtype=bool)
+
+        # set hypo_state as 1 if currently under consecutive low SpO2
+        for ind, SpO2 in enumerate(SpO2_arr):
+            if ind + win_hypo >= len(SpO2_arr):
+                continue
+            if SpO2 <= self.hypoxemia_thresh and if_SpO2_recorded[ind] == 1:
+                if_low_SpO2[ind] = True
+                if np.sum([o2 <= self.hypoxemia_thresh for o2 in SpO2_arr[ind: ind + win_hypo]]) == win_hypo and \
+                        pid_arr[ind] == pid_arr[ind + win_hypo]:
+                    hypo_state[ind: ind + win_hypo] = 2
+                    labels_static[pid_arr[ind]] = True
+            elif SpO2 >= 94:
+                hypo_state[ind] = 0
+            else:
+                hypo_state[ind] = 1
+            if ts_arr[ind] <= 10:
+                if_to_drop[ind] = True
+            if if_SpO2_recorded[ind] == 0:
+                if_to_drop[ind - win_pred: ind] = True
+
+        # label current timestep as 1 if any timestep within the future [win_pred] is under hypo_state
+        if_hypo = hypo_state == 2
+        for ind, SpO2 in enumerate(SpO2_arr):
+            if ind + win_pred + 1 >= len(SpO2_arr):
+                continue
+            # True if any hypo_state within future [wind_pred] AND same pid [wind_pred] later
+            if sum(if_hypo[ind + 1: ind + win_pred + 1]) > 0 and pid_arr[ind] == pid_arr[ind + win_pred]:
+                labels_dynamic[ind] = 2
+            else:
+                labels_dynamic[ind] = hypo_state[ind + win_pred]
+            # to be discarded if label True AND currently under hypo_state
+            if labels_dynamic[ind] == 2 and hypo_state[ind] == 2:
+                if_to_drop[ind] = True
+
+        static_label = df_static[['pid']]
+        static_label = static_label.assign(label=labels_static.astype(int))
+
+        dynamic_label = df_dynamic[['index', 'pid', 'ts', 'SpO2']]
+        dynamic_label = dynamic_label.assign(if_low_SpO2=if_low_SpO2.astype(int),
+                                             label=labels_dynamic.astype(int),
+                                             if_to_drop=if_to_drop.astype(int))
+
+        return static_label, dynamic_label
+
 
 class PatientFilter:
 
@@ -294,6 +353,49 @@ class FeatureExtraction:
         df.to_csv(sta_feat_file, index=False)
 
     def gen_ewm_dynamic_features(self, df_static, df_dynamic, feat_type):
+        """
+        Extracting exponentially weighted moving average/variance features.
+        :param df_static:
+        :param df_dynamic:
+        :param feat_type:
+        :return:
+        """
+
+        num_feat = len(self.feat_use)
+        dynamic_columns = df_dynamic.columns
+        ewm_columns = self.ewm_feature_columns
+
+        df_seed = df_dynamic[self.feat_use].copy()
+        df = df_dynamic[['index', 'pid', 'ts']].copy()
+
+        df[ewm_columns[0:num_feat]] = df_seed
+        df[ewm_columns[num_feat:num_feat * 2]] = df_seed.rolling(window=self.feature_window).min()
+        df[ewm_columns[num_feat * 2:num_feat * 3]] = df_seed.rolling(window=self.feature_window).max()
+        df[ewm_columns[num_feat * 3:num_feat * 4]] = df_seed.ewm(halflife=0.1).mean()
+        df[ewm_columns[num_feat * 4:num_feat * 5]] = df_seed.ewm(halflife=1).mean()
+        df[ewm_columns[num_feat * 5:num_feat * 6]] = df_seed.ewm(halflife=5).mean()
+        df[ewm_columns[num_feat * 6:num_feat * 7]] = df_seed.ewm(halflife=10).mean()
+        df[ewm_columns[num_feat * 7:num_feat * 8]] = df_seed.ewm(halflife=5).var()
+        df[ewm_columns[num_feat * 8:num_feat * 9]] = df_seed.ewm(halflife=10).var()
+
+        df = df.fillna(value=0)
+        # normalization
+        min_max_scaler = preprocessing.MinMaxScaler()
+        X = df[['ts'] + self.ewm_feature_columns].values
+        df[['ts'] + self.ewm_feature_columns] = min_max_scaler.fit_transform(X)
+
+        # for imputed data, add dummy columns
+        if len(dynamic_columns) > num_feat + 3:
+            dummy_columns = dynamic_columns[num_feat + 4:]
+            df_dummy = df_dynamic[dummy_columns]
+            df = pd.concat([df, df_dummy], axis=1, sort=False)
+
+        # add static features to each row
+        df = pd.merge(df, self.gen_static_features(df_static, feat_type=feat_type), on='pid')
+
+        return df
+
+    def gen_lstm_features(self, df_static, df_dynamic, feat_type):
         """
         Extracting exponentially weighted moving average/variance features.
         :param df_static:
