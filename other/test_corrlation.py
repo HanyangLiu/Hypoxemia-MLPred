@@ -1,5 +1,5 @@
 
-from train_realtime_predictor import prepare_data, train_gbtree
+from train_realtime_gbtree import prepare_data, train_gbtree
 from utils.utility_analysis import line_search_best_metric, count_correct_label, best_ntree_score
 import matplotlib.pyplot as plt
 from file_config.config import config

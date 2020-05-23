@@ -139,4 +139,41 @@ def count_correct_label(y_test, y_prob, win_size):
     return counts_gt, counts
 
 
+def first_correct_label(y_test, y_prob, win_size):
+    """
+    Analyze the correctly predicted label distribution
+    :param y_test:
+    :param y_pred:
+    :param win_size:
+    :return:
+    """
+    _, y_pred = line_search_best_metric(y_test, y_prob, spec_thresh=0.95)
+
+    idx_arr = np.where(y_test)[0]
+    horizon_arr = np.zeros(len(y_pred))
+    first_correct = []
+    for i, y_idx in enumerate(idx_arr):
+        if i == len(idx_arr) - 1:
+            continue
+        if idx_arr[i + 1] != idx_arr[i] + 1:
+            try:
+                horizon_arr[y_idx - win_size + 1: y_idx + 1] = np.array(list(np.linspace(win_size, 1, win_size)))
+                corrct = y_pred[y_idx - win_size + 1: y_idx + 1] == y_test[y_idx - win_size + 1: y_idx + 1]
+                first_correct.append(np.where(corrct)[0][0])
+            except:
+                continue
+    x = ['t-' + str(int(i)) for i in np.linspace(win_size, 1, win_size)]
+    x_pos = [i for i, _ in enumerate(x)]
+    print([sum(np.array(first_correct) == i) for i in range(win_size)])
+    plt.figure()
+    plt.bar(x_pos, [sum(np.array(first_correct) == i) for i in range(win_size)])
+    plt.xticks(x_pos, x)
+    plt.title('win_size =' + str(win_size))
+    plt.savefig('win_size' + str(win_size) + '.png')
+    plt.close()
+
+    return first_correct
+
+
+
 

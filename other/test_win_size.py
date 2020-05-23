@@ -1,6 +1,6 @@
 
-from train_realtime_predictor import prepare_data, train_gbtree
-from utils.utility_analysis import plot_roc, plot_prc, metric_eval, line_search_best_metric, count_correct_label
+from train_realtime_gbtree import prepare_data, train_gbtree
+from utils.utility_analysis import plot_roc, plot_prc, metric_eval, line_search_best_metric, count_correct_label, first_correct_label
 import matplotlib.pyplot as plt
 from file_config.config import config
 from sklearn import metrics
@@ -24,7 +24,7 @@ dynamic_feature = pd.read_csv('data/features/' + args.dynamic_feature_file)
 FPR, TPR, PREC, REC = [], [], [], []
 METRIC = []
 
-for win_size in [15]:
+for win_size in [25, 30, 35, 40]:
 
     args.prediction_window = win_size
     print(args)
@@ -62,7 +62,10 @@ for win_size in [15]:
     print('--------------------------------------------')
 
     # analyze the correctly predicted label distribution
-    count_correct_label(y_test, y_prob, win_size)
+    first_correct_label(y_test, y_prob, win_size)
+
+
+
 
 
 

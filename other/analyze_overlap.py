@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 from file_config.config import config
 from utils.utility_preprocess import PatientFilter, LabelAssignment, DataImputation
-from train_realtime_predictor import prepare_data, train_gbtree
+from train_realtime_gbtree import prepare_data, train_gbtree
 from utils.utility_analysis import plot_roc, plot_prc, metric_eval, line_search_best_metric
 from sklearn.model_selection import train_test_split
 from sklearn import preprocessing, metrics

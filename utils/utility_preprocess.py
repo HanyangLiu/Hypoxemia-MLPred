@@ -395,7 +395,7 @@ class FeatureExtraction:
 
         return df
 
-    def gen_lstm_features(self, df_static, df_dynamic, feat_type):
+    def gen_lstm_features(self, df_static, df_dynamic, feat_type, sliding_window):
         """
         Extracting exponentially weighted moving average/variance features.
         :param df_static:
@@ -403,29 +403,33 @@ class FeatureExtraction:
         :param feat_type:
         :return:
         """
+        feature_columns = []
+        for i in range(sliding_window):
+            for feat in self.feat_use:
+                column = feat + '-' + str(i)
+                feature_columns.append(column)
+
+        new_columns = []
+        for feat in self.feat_use:
+            for i in range(sliding_window):
+                column = feat + '-' + str(i)
+                new_columns.append(column)
 
         num_feat = len(self.feat_use)
         dynamic_columns = df_dynamic.columns
-        ewm_columns = self.ewm_feature_columns
 
-        df_seed = df_dynamic[self.feat_use].copy()
+        df_seed = df_dynamic[['pid'] + self.feat_use].copy()
         df = df_dynamic[['index', 'pid', 'ts']].copy()
 
-        df[ewm_columns[0:num_feat]] = df_seed
-        df[ewm_columns[num_feat:num_feat * 2]] = df_seed.rolling(window=self.feature_window).min()
-        df[ewm_columns[num_feat * 2:num_feat * 3]] = df_seed.rolling(window=self.feature_window).max()
-        df[ewm_columns[num_feat * 3:num_feat * 4]] = df_seed.ewm(halflife=0.1).mean()
-        df[ewm_columns[num_feat * 4:num_feat * 5]] = df_seed.ewm(halflife=1).mean()
-        df[ewm_columns[num_feat * 5:num_feat * 6]] = df_seed.ewm(halflife=5).mean()
-        df[ewm_columns[num_feat * 6:num_feat * 7]] = df_seed.ewm(halflife=10).mean()
-        df[ewm_columns[num_feat * 7:num_feat * 8]] = df_seed.ewm(halflife=5).var()
-        df[ewm_columns[num_feat * 8:num_feat * 9]] = df_seed.ewm(halflife=10).var()
+        for i in range(sliding_window):
+            df[feature_columns[num_feat * i: num_feat * (i + 1)]] = df_seed.groupby(['pid']).shift(periods=i, fill_value=0).iloc[:, 1:].reset_index(level=0, drop=True)
 
+        df = df.reindex(columns=['index', 'pid', 'ts'] + new_columns)
         df = df.fillna(value=0)
         # normalization
         min_max_scaler = preprocessing.MinMaxScaler()
-        X = df[['ts'] + self.ewm_feature_columns].values
-        df[['ts'] + self.ewm_feature_columns] = min_max_scaler.fit_transform(X)
+        X = df[['ts'] + new_columns].values
+        df[['ts'] + new_columns] = min_max_scaler.fit_transform(X)
 
         # for imputed data, add dummy columns
         if len(dynamic_columns) > num_feat + 3:
@@ -460,8 +464,9 @@ class FeatureExtraction:
             procedure_corpus = df_static['ScheduledProcedure'].astype('|S').values
             vectorizer = CountVectorizer()
             vecs = vectorizer.fit_transform(procedure_corpus).toarray()
+            words = vectorizer.get_feature_names()
 
-            df_corpus = pd.DataFrame(vecs)
+            df_corpus = pd.DataFrame(vecs, columns=words)
             df = pd.concat([df, df_corpus], axis=1, sort=False)
 
         # bag-of-words and reduced by PCA

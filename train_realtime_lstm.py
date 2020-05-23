@@ -4,72 +4,48 @@ from numpy import hstack
 import tensorflow as tf
 import keras
 from keras.models import Sequential
-from keras.layers import Dense
-from keras.layers import LSTM
+from keras.layers import Dense, LSTM, Dropout, Embedding, SpatialDropout1D
 from keras.preprocessing.sequence import TimeseriesGenerator
 import matplotlib.pyplot as plt
+from sklearn import preprocessing, metrics
+from utils.utility_analysis import plot_roc, plot_prc, metric_eval, line_search_best_metric
 import argparse
 import pandas as pd
 from file_config.config import config
 from utils.utility_preprocess import PatientFilter, LabelAssignment, DataImputation
 from sklearn.model_selection import train_test_split
+from utils.utility_training import DataGenerator
+from utils.model_cnn_rnn import get_model_lstm_w_att, cnn_model
+from utils.model_rnn import lstm_1, lstm_2
 import pickle
 import sys
 
 
-class DataGenerator(keras.utils.Sequence):
-    'Generates data for Keras'
-    def __init__(self, list_IDs, labels, batch_size=32, dim=(32, 32, 32), n_channels=1,
-                 n_classes=10, shuffle=True):
-        'Initialization'
-        self.dim = dim
-        self.batch_size = batch_size
-        self.labels = labels
-        self.list_IDs = list_IDs
-        self.n_channels = n_channels
-        self.n_classes = n_classes
-        self.shuffle = shuffle
-        self.on_epoch_end()
-        self.feature_window = 10
+def evaluate(model, test_data_generator):
+    # Testing
+    y_prob = model.predict_generator(test_data_generator)[:, 1]
+    y_test = test_data_generator[0][1][:, 1]
 
-    def __len__(self):
-        'Denotes the number of batches per epoch'
-        return int(np.floor(len(self.list_IDs) / self.batch_size))
+    # Evaluation
+    fpr, tpr, _ = metrics.roc_curve(y_test, y_prob)
+    prec, rec, _ = metrics.precision_recall_curve(y_test, y_prob)
+    (sensitivity, specificity, PPV, NPV, f1, acc), _ = line_search_best_metric(y_test, y_prob, spec_thresh=0.95)
 
-    def __getitem__(self, index):
-        'Generate one batch of data'
-        # Generate indexes of the batch
-        indexes = self.indexes[index*self.batch_size:(index+1)*self.batch_size]
+    print('--------------------------------------------')
+    print('Evaluation of test set:')
+    print("AU-ROC:", "%0.4f" % metrics.auc(fpr, tpr),
+          "AU-PRC:", "%0.4f" % metrics.auc(rec, prec))
+    print("sensitivity:", "%0.4f" % sensitivity,
+          "specificity:", "%0.4f" % specificity,
+          "PPV:", "%0.4f" % PPV,
+          "NPV:", "%0.4f" % NPV,
+          "F1 score:", "%0.4f" % f1,
+          "accuracy:", "%0.4f" % acc)
+    print('--------------------------------------------')
 
-        # Find list of IDs
-        list_IDs_temp = [self.list_IDs[k] for k in indexes]
-
-        # Generate data
-        X, y = self.__data_generation(list_IDs_temp)
-
-        return X, y
-
-    def on_epoch_end(self):
-        'Updates indexes after each epoch'
-        self.indexes = np.arange(len(self.list_IDs))
-        if self.shuffle == True:
-            np.random.shuffle(self.indexes)
-
-    def __data_generation(self, list_IDs_temp):
-        'Generates data containing batch_size samples' # X : (n_samples, *dim, n_channels)
-        # Initialization
-        X = np.empty((self.batch_size, *self.dim, self.n_channels))
-        y = np.empty((self.batch_size), dtype=int)
-
-        # Generate data
-        for i, ID in enumerate(list_IDs_temp):
-            # Store sample
-            X[i,] = np.load('data/' + ID + '.npy')
-
-            # Store class
-            y[i] = self.labels[ID]
-
-        return X, keras.utils.to_categorical(y, num_classes=self.n_classes)
+    # plot ROC and PRC
+    plot_roc(fpr, tpr, 'data/result/roc_initial.png')
+    plot_prc(rec, prec, 'data/result/pr_initial.png')
 
 
 parser = argparse.ArgumentParser(description='hypoxemia prediction')
@@ -83,6 +59,7 @@ print(args)
 
 df_static = pd.read_csv(config.get('processed', 'df_static_file'))
 df_dynamic = pd.read_csv(config.get('processed', 'df_dynamic_file'))
+static_feat = pd.read_csv('data/features/static-notxt.csv')
 
 
 '''Prepare Data'''
@@ -128,10 +105,37 @@ is_in_test = dynamic_label[['pid']].isin(pid_test)['pid'].values
 selected_idx_train = list(np.where(is_in_train)[0])
 selected_idx_test = list(np.where(is_in_test)[0])
 
-timeSeriesTr = df_dynamic.iloc[selected_idx_train, 2:]
-labelsTr = dynamic_label.iloc[selected_idx_train, 'label']
-timeSeriesTe = df_dynamic.iloc[selected_idx_test, 2:]
-labelsTe = dynamic_label.iloc[selected_idx_test, 'label']
+timeSeriesTr = df_dynamic.iloc[selected_idx_train, 0:15]
+labelsTr = dynamic_label.iloc[selected_idx_train][['index', 'label']]
+timeSeriesTe = df_dynamic.iloc[selected_idx_test, 0:15]
+labelsTe = dynamic_label.iloc[selected_idx_test][['index', 'label']]
 
+batch_size = pow(2, 14)
+window_size = 10
+n_features = len(timeSeriesTr.columns) + len(static_feat.columns) - 3
+train_data_generator = DataGenerator(timeSeriesTr, static_feat, labelsTr,
+                                     batch_size=batch_size,
+                                     window_size=window_size)
+valid_data_generator = DataGenerator(timeSeriesTe, static_feat, labelsTe,
+                                     batch_size=batch_size,
+                                     window_size=window_size)
+test_data_generator = DataGenerator(timeSeriesTe, static_feat, labelsTe,
+                                    batch_size=len(timeSeriesTe),
+                                    window_size=window_size)
+
+model = lstm_2(window_size, n_features)
+# model = cnn_model()
+# model.summary()
+
+model.fit_generator(generator=train_data_generator,
+                    validation_data=valid_data_generator,
+                    epochs=10,
+                    use_multiprocessing=True,
+                    verbose=1
+                    )
+pickle.dump(model, open('data/model/realtime_lstm.sav', 'wb'))
+model = pickle.load(open('data/model/realtime_lstm.sav', 'rb'))
+
+evaluate(model, test_data_generator)
 
 

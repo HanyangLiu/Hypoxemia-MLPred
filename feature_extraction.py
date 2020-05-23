@@ -35,11 +35,17 @@ def feature_extraction(df_static, df_dynamic, type):
     if type == 'dynamic-sta':
         extractor.gen_stat_dynamic_features(df_static, df_dynamic, sta_feat_file, feat_type=args.dynamic_txt)
         print('Done real-time statistical feature extraction!')
+    if type == 'dynamic-lstm':
+        df = extractor.gen_lstm_features(df_static, df_dynamic, feat_type=args.dynamic_txt, sliding_window=10)
+        print('Done real-time statistical feature extraction!')
+        print('Saving to files:', lstm_feat_file)
+        df.to_csv(lstm_feat_file, index=False)
+        print('Done!')
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='feature extraction')
-    parser.add_argument('--type', type=str, default='static')  # 'static' OR 'dynamic-ewm' OR 'dynamic-sta'
+    parser.add_argument('--type', type=str, default='dynamic-lstm')  # 'static' OR 'dynamic-ewm' OR 'dynamic-sta'
     parser.add_argument('--if_impute', type=str, default='True')  # 'True' OR 'False'
     parser.add_argument('--static_txt', type=str, default='bow')  # 'bow' OR 'rbow'
     parser.add_argument('--dynamic_txt', type=str, default='notxt')  # 'notxt' OR 'rbow'
@@ -55,6 +61,7 @@ if __name__ == '__main__':
     static_feature_file = 'data/features/static-' + args.static_txt + '.csv'
     ewm_feat_file = 'data/features/dynamic-ewm-' + args.dynamic_txt + '-' + token_impute + '.csv'
     sta_feat_file = 'data/features/dynamic-sta-' + args.dynamic_txt + '-' + token_impute + '.csv'
+    lstm_feat_file = 'data/features/dynamic-lstm-' + args.dynamic_txt + '-' + token_impute + '.csv'
 
     # load DataFrame real-time data
     df_static = pd.read_csv(df_static_file)

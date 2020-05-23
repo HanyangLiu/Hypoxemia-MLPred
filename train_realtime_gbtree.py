@@ -13,6 +13,7 @@ import matplotlib.pyplot as plt
 import argparse
 import pickle
 import sys
+import shap
 
 
 def prepare_data(df_static, df_dynamic, dynamic_feature, args):
@@ -128,6 +129,13 @@ def evaluate(model, X_test, y_test):
     # plot ROC and PRC
     plot_roc(fpr, tpr, 'data/result/roc_initial.png')
     plot_prc(rec, prec, 'data/result/pr_initial.png')
+
+
+def model_explain(model, data_to_predict):
+
+    explainer = shap.TreeExplainer(model)
+    shap_values = explainer.shap_values(data_to_predict)
+    shap.summary_plot(shap_values, data_to_predict, plot_type="bar")
 
 
 if __name__ == "__main__":

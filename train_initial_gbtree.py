@@ -14,6 +14,8 @@ from xgboost import XGBClassifier
 import matplotlib.pyplot as plt
 import argparse
 import pickle
+import shap
+from IPython.display import display, HTML
 
 
 def prepare_data(df_static, df_dynamic, static_feature, args):
@@ -64,7 +66,7 @@ def train_gbtree(X_train, y_train, X_test, y_test):
                           # learning_rate=0.1,
                           # n_estimators=2000,
                           # max_depth=4,
-                          # verbosity=2
+                          verbosity=1
                           )
     eval_set = [(X_test, y_test)]
     eval_metric = ["aucpr"]
@@ -119,5 +121,7 @@ if __name__ == "__main__":
     model = train_gbtree(X_train, y_train, X_test, y_test)
     pickle.dump(model, open(config.get('processed', 'initial_model_file'), 'wb'))
     evaluate(model, X_test, y_test)
+
+
 
 

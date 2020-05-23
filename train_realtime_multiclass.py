@@ -13,6 +13,7 @@ import matplotlib.pyplot as plt
 import argparse
 import pickle
 import sys
+from sklearn import metrics
 
 
 def prepare_data(df_static, df_dynamic, dynamic_feature, args):
@@ -106,9 +107,13 @@ def train_gbtree(X_train, y_train):
 def evaluate(model, X_test, y_test):
     # Testing
     y_pred = model.predict(X_test)
+    y_prob = model.predict_proba(X_test)
+    np.savetxt('data/result/y_prob_multi', y_prob)
+    np.savetxt('data/result/y_test_multi', y_test)
     PPV = metrics.precision_score(y_test, y_pred, labels=[1, 2], average='micro')
     sensitivity = metrics.recall_score(y_test, y_pred, labels=[1, 2], average='micro')
     f1 = metrics.f1_score(y_test, y_pred, labels=[1, 2], average='micro')
+
 
     print('--------------------------------------------')
     print('Evaluation of test set:')
