@@ -11,7 +11,7 @@ class DataGenerator(keras.utils.Sequence):
         self.n_features = len(timeSeries.columns) + len(static.columns) - 3
         self.batch_size = batch_size
         self.timeSeries = timeSeries
-        self.static = static
+        self.static_features = static
         self.labels = labels
         self.list_data_index = list(timeSeries['index'].values)
         self.n_classes = n_classes
@@ -50,7 +50,7 @@ class DataGenerator(keras.utils.Sequence):
         df_seed = self.timeSeries[self.timeSeries['index'].isin(list_IDs_seed)]
         for j in range(self.sliding_window):
             slice = pd.merge(df_seed.groupby(['pid']).shift(periods=j, fill_value=0).reset_index(level=0, drop=True),
-                             self.static, how='left', on='pid')
+                             self.static_features, how='left', on='pid')
             X[:, j, :] = slice.iloc[len(df_seed) - len(list_IDs_temp):, 2:]
 
         # y: (n_samples, 1)
