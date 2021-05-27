@@ -65,7 +65,15 @@ def metric_eval(y_test, y_pred):
     return sensitivity, specificity, PPV, NPV, f1, acc
 
 
-def line_search_best_metric(y_test, y_prob, spec_thresh):
+def au_prc(y_true, y_prob):
+
+    prec, rec, _ = metrics.precision_recall_curve(y_true, y_prob)
+    au_prc = metrics.auc(rec, prec)
+
+    return au_prc
+
+
+def line_search_best_metric(y_test, y_prob, spec_thresh=0.95):
     """
     Line search the best threshold to balance the trade-off between sens/spec
     :param y_test:
@@ -141,7 +149,7 @@ def count_correct_label(y_test, y_prob, win_size):
 
 def first_correct_label(y_test, y_prob, win_size):
     """
-    Analyze the correctly predicted label distribution
+    Analyze the first correctly predicted label distribution
     :param y_test:
     :param y_pred:
     :param win_size:
@@ -158,11 +166,11 @@ def first_correct_label(y_test, y_prob, win_size):
         if idx_arr[i + 1] != idx_arr[i] + 1:
             try:
                 horizon_arr[y_idx - win_size + 1: y_idx + 1] = np.array(list(np.linspace(win_size, 1, win_size)))
-                corrct = y_pred[y_idx - win_size + 1: y_idx + 1] == y_test[y_idx - win_size + 1: y_idx + 1]
-                first_correct.append(np.where(corrct)[0][0])
+                correct = y_pred[y_idx - win_size + 1: y_idx + 1] == y_test[y_idx - win_size + 1: y_idx + 1]
+                first_correct.append(np.where(correct)[0][0])
             except:
                 continue
-    x = ['t-' + str(int(i)) for i in np.linspace(win_size, 1, win_size)]
+    x = [str(int(i)) for i in np.linspace(win_size, 1, win_size)]
     x_pos = [i for i, _ in enumerate(x)]
     print([sum(np.array(first_correct) == i) for i in range(win_size)])
     plt.figure()
@@ -174,6 +182,48 @@ def first_correct_label(y_test, y_prob, win_size):
 
     return first_correct
 
+
+def estimate_prediction_horizon(y_test, y_prob, win_size):
+    """
+    Analyze the first correctly predicted label distribution
+    :param y_test:
+    :param y_pred:
+    :param win_size:
+    :return:
+    """
+    _, y_pred = line_search_best_metric(y_test, y_prob, spec_thresh=0.95)
+
+    idx_arr = np.where(y_test)[0]
+    horizon_arr = np.zeros(len(y_pred))
+    for i, y_idx in enumerate(idx_arr):
+        if i == len(idx_arr) - 1:
+            continue
+        if idx_arr[i + 1] != idx_arr[i] + 1:
+            try:
+                horizon_arr[y_idx - win_size + 1: y_idx + 1] = np.array(list(np.linspace(win_size, 1, win_size)))
+            except:
+                continue
+
+    counts = []
+    for j in list(np.linspace(1, win_size, win_size)):
+        j = int(j)
+        ids = np.where(horizon_arr == j)[0]
+        count = np.sum([np.sum(y_pred[i: i+j]) == j for i in ids])
+        counts.append(count)
+    print('Result:', counts)
+
+    x = [str(int(i)) for i in np.linspace(win_size, 1, win_size)]
+    x_pos = [i for i, _ in enumerate(x)]
+    plt.figure()
+    plt.bar(x_pos, counts)
+    plt.xticks(x_pos, x)
+    plt.title('Correct predicted time horizon: win_size =' + str(win_size))
+    plt.xlabel('Minutes to hypoxemia')
+    plt.ylabel('Frequency')
+    plt.savefig('data/result/win_size' + str(win_size) + '.png')
+    plt.close()
+
+    return counts
 
 
 

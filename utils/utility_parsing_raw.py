@@ -66,17 +66,19 @@ class ParseStaticData:
         self.demographic_file = demographic_file
         self.df_demo = self.parse_demographic()
         self.start_time_dict = self.extract_start_time()
+        self.stop_time_dict = self.extract_stop_time()
         self.id_converter = self.extract_id_converter()  # patientID to pid
 
     def parse_demographic(self):
         df = pd.read_csv(self.demographic_file)
-        df.sort_values(by=['PatientID'])
+        df = df.sort_values(by=['PatientID'])
 
         return df
 
     def gen_static_dataframe(self):
+
         df_old = self.df_demo
-        column_kept = ['HEIGHT', 'WEIGHT', 'ScheduledProcedure']
+        column_kept = ['HEIGHT', 'WEIGHT', 'SecondHandSmoke', 'ScheduledProcedure', 'EBL', 'Urine_Output']
         df = df_old.filter(column_kept, axis=1)
 
         # add converted pid column
@@ -91,7 +93,6 @@ class ParseStaticData:
         airway2_type = df_old['Airway_Event2'].unique()
         airway_type = list(set(airway1_type) | set(airway2_type))
         airway_mapping = dict(zip(airway_type, list(range(len(airway_type)))))
-
         airway1_code = [airway_mapping[ele] for ele in df_old['Airway_Event1'].values]
         airway2_code = [airway_mapping[ele] for ele in df_old['Airway_Event2'].values]
 
@@ -101,21 +102,36 @@ class ParseStaticData:
 
         df = df.assign(AnesthesiaDuration=np.array(durations),
                        AGE=np.array(ages),
+                       Gender=np.array(self.digitalize_val(df_old, 'Gender')),
+                       AnesthesiaType=np.array(self.digitalize_val(df_old, 'AnesthesiaType')),
+                       BedName=np.array(self.digitalize_val(df_old, 'BedName')),
                        Airway_1_Time=np.array(airway1),
                        Airway_2_Time2=np.array(airway2),
                        TimeOfDay=np.array(time_of_day),
                        Airway_1=np.array(airway1_code),
                        Airway_2=np.array(airway2_code),
                        ASA=np.array(ASA),
-                       if_Emergency=np.array(if_Emergency))
+                       if_Emergency=np.array(if_Emergency).astype(int)
+                       )
 
         # reindex
-        column_name = ['pid', 'AGE', 'TimeOfDay', 'AnesthesiaDuration', 'ASA', 'if_Eergency'] + column_kept + \
-                      ['Airway_1', 'Airway_1_Time', 'Airway_2', 'Airway_2_Time']
+        column_name = ['pid', 'Gender', 'AGE', 'HEIGHT', 'WEIGHT', 'SecondHandSmoke', 'BedName', 'TimeOfDay',
+                       'AnesthesiaType', 'ASA', 'if_Emergency', 'ScheduledProcedure', 'Airway_1', 'Airway_1_Time',
+                       'Airway_2', 'Airway_2_Time', 'AnesthesiaDuration', 'EBL', 'Urine_Output']
         df = df.reindex(column_name, axis=1)
         df = df.sort_values(by=['pid'], axis=0)
 
         return df
+
+    def digitalize_val(self, dataframe, column_name):
+        """Transform discrete features into coded numbers"""
+        type = dataframe[column_name].unique().tolist()
+        if np.nan in type:
+            type.remove(np.nan)
+        mapping = dict(zip(type, list(range(len(type)))))
+        mapping[np.nan] = np.nan
+        value_list = [mapping[ele] for ele in dataframe[column_name].values]
+        return value_list
 
     def extract_id_converter(self):
         df = self.df_demo
@@ -132,6 +148,14 @@ class ParseStaticData:
         start_time_dict = dict(zip(patient_ids, anesthesia_start))
 
         return start_time_dict
+
+    def extract_stop_time(self):
+        df = self.df_demo
+        anesthesia_stop = df['Anesthesia Stop'].tolist()
+        patient_ids = df['PatientID'].tolist()
+        stop_time_dict = dict(zip(patient_ids, anesthesia_stop))
+
+        return stop_time_dict
 
     def time_abs_to_relative(self):
         df = self.df_demo
@@ -155,8 +179,10 @@ class ParseStaticData:
                               - datetime.strptime(start_time, '%m/%d/%y %H:%M')).seconds / 60)
             # age by year
             try:
+                # ages.append((datetime.strptime(start_time, '%m/%d/%y %H:%M')
+                #              - datetime.strptime(birth_time, '%m/%d/%y %H:%M')).days / 365)
                 ages.append((datetime.strptime(start_time, '%m/%d/%y %H:%M')
-                             - datetime.strptime(birth_time, '%m/%d/%y %H:%M')).days / 365)
+                             - datetime.strptime(birth_time, '%m/%d/%y')).days / 365)
             except:
                 ages.append(None)
 
@@ -190,53 +216,74 @@ class ParseDynamicData:
 
         # real time feature name
         self.type_index_mapping = {'18': 'invDiastolic', '19': 'invMeanBP', '20': 'invSystolic', '23': 'HR',
-                                   '25': 'Diastolic', '26': 'MeanBP', '27': 'Systolic', '159': 'SpO2', '875': 'Pulse',
-                                   '1021': 'ETCO2', '3292': 'Temp', '3300': 'coreTemp'}
-        feat_name = ['invDiastolic', 'invMeanBP', 'invSystolic', 'HR', 'Diastolic', 'MeanBP', 'Systolic', 'SpO2',
-                     'Pulse', 'ETCO2', 'Temp', 'coreTemp']
+                                   '25': 'Diastolic', '26': 'MeanBP', '27': 'Systolic', '159': 'SpO2',
+                                   '295': 'RespRate', '300': 'PEEP', '627': 'PIP', '728': 'FiO2', '828': 'TidalVolume',
+                                   '875': 'Pulse', '1021': 'ETCO2', '1483': 'O2Flow', '1484': 'AirFlow',
+                                   '1485': 'N2OFlow', '3292': 'Temp', '3300': 'coreTemp'}
+        feat_name = list(self.type_index_mapping.values())
         self.column_name = ['pid', 'ts'] + feat_name
         data_type = [int, int] + [float for count in range(len(feat_name))]
         self.type_dict = dict(zip(self.column_name, data_type))
 
-    def parse_vitals(self, start_time_dict, id_converter):
+    def parse_vitals(self, start_time_dict, stop_time_dict, id_converter):
 
         data_comb = {}
         pid_to_patientID = dict((y, x) for x, y in id_converter.items())
         vitals_files = glob.glob(os.path.join(self.vitals_dir, '*.csv'))
 
         for file_ind, vitals_file in enumerate(vitals_files):
-            print("Parsing file:", file_ind + 1, "/", len(vitals_files))
+            print("Parsing file:", file_ind + 1, "/", len(vitals_files), ':', os.path.split(vitals_file)[1])
 
             with open(vitals_file, 'r') as f:
                 lines = f.readlines()
 
                 for line_ind, line in enumerate(lines):
-                    feature_list = line.split(',')
-                    pid = feature_list[0]
+                    if '2020_01' in os.path.split(vitals_file)[1]:
+                        if line_ind <= 1:
+                            continue
+                        feature_list = line.split()
+                        if len(feature_list) < 4:
+                            continue
+                        time = feature_list[2] + ' ' + feature_list[3]
+                        value = feature_list[4]
+                    else:
+                        if line_ind == 0:
+                            continue
+                        feature_list = line.split(',')
+                        if len(feature_list) < 4:
+                            continue
+                        time = feature_list[2]
+                        value = feature_list[3]
+
+                    PatientID = feature_list[0]
                     vital_type = feature_list[1]
-                    value = feature_list[3]
-                    patientID = pid_to_patientID[int(pid)]
-                    surgery_start_time = start_time_dict[patientID]
 
                     # convert actual time to relative timestep with surgery starting time as beginning
-                    current_time = (datetime.strptime(feature_list[2], '%Y-%m-%d %H:%M:%S.%f')
-                                    - datetime.strptime(surgery_start_time, '%m/%d/%y %H:%M')).seconds / 60
-                    current_time = int(current_time)
+                    surgery_start_time = start_time_dict[int(PatientID)]
+                    surgery_stop_time = stop_time_dict[int(PatientID)]
+                    duration = int((datetime.strptime(surgery_stop_time, '%m/%d/%y %H:%M')
+                                   - datetime.strptime(surgery_start_time, '%m/%d/%y %H:%M')).seconds / 60)
+                    current_time = int((datetime.strptime(time, '%Y-%m-%d %H:%M:%S.%f')
+                                       - datetime.strptime(surgery_start_time, '%m/%d/%y %H:%M')).seconds / 60)
+
+                    # only extract measurements within anesthesia procedure
+                    if current_time >= duration or current_time < 0:
+                        continue
 
                     # fill data into dictionary
-                    if pid not in data_comb.keys():
-                        data_comb[pid] = {}
-                    if str(current_time) not in data_comb[pid].keys():
-                        data_comb[pid][str(current_time)] = {}
-                    data_comb[pid][str(current_time)][self.type_index_mapping[vital_type]] = float(value)
+                    if PatientID not in data_comb.keys():
+                        data_comb[PatientID] = {}
+                    if str(current_time) not in data_comb[PatientID].keys():
+                        data_comb[PatientID][str(current_time)] = {}
+                    data_comb[PatientID][str(current_time)][self.type_index_mapping[vital_type]] = float(value)
 
         # Convert dictionary into DataFrame
         rows = []
-        for pid in data_comb:
-            patient_data = data_comb[pid]
+        for PatientID in data_comb:
+            patient_data = data_comb[PatientID]
             for time in patient_data:
                 row = patient_data[time]
-                row['pid'] = int(pid)
+                row['pid'] = id_converter[int(PatientID)]
                 row['ts'] = int(time)
                 rows.append(row)
         df = pd.DataFrame(rows)

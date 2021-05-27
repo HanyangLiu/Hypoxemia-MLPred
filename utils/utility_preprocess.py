@@ -36,11 +36,11 @@ class LabelAssignment:
         ts_arr = df_dynamic['ts'].values
 
         labels_static = np.zeros(len(df_static), dtype=bool)
-        labels_dynamic = np.zeros(len(SpO2_arr), dtype=bool)
+        labels_dynamic = np.zeros(len(df_dynamic), dtype=bool)
 
-        if_low_SpO2 = np.zeros(len(SpO2_arr), dtype=bool)
-        if_hypo_state = np.zeros(len(SpO2_arr), dtype=bool)
-        if_to_drop = np.zeros(len(SpO2_arr), dtype=bool)
+        if_low_SpO2 = np.zeros(len(df_dynamic), dtype=bool)
+        if_hypo_state = np.zeros(len(df_dynamic), dtype=bool)
+        if_to_drop = np.zeros(len(df_dynamic), dtype=bool)
 
         # set if_hypo_state as 1 if currently under consecutive low SpO2
         for ind, SpO2 in enumerate(SpO2_arr):
@@ -52,8 +52,8 @@ class LabelAssignment:
                         pid_arr[ind] == pid_arr[ind + win_hypo]:
                     if_hypo_state[ind: ind + win_hypo] = True
                     labels_static[pid_arr[ind]] = True
-            if ts_arr[ind] <= 10:
-                if_to_drop[ind] = True
+            # if ts_arr[ind] <= 10:
+            #     if_to_drop[ind] = True
             if if_SpO2_recorded[ind] == 0:
                 if_to_drop[ind - win_pred: ind] = True
 
@@ -192,9 +192,10 @@ class PatientFilter:
 class DataImputation:
 
     def __init__(self):
-        self.missing_gap_thresh = 10
+        self.missing_gap_thresh = 20
         self.feat_name = ['invDiastolic', 'invMeanBP', 'invSystolic', 'HR', 'Diastolic', 'MeanBP', 'Systolic', 'SpO2',
-                          'Pulse', 'ETCO2', 'Temp', 'coreTemp']
+                          'RespRate', 'PEEP', 'PIP', 'TidalVolume', 'Pulse', 'ETCO2', 'O2Flow', 'AirFlow',
+                          'N2OFlow', 'Temp']
         self.inv_column = ['invDiastolic', 'invMeanBP', 'invSystolic']
         self.noninv_column = ['Diastolic', 'MeanBP', 'Systolic']
 
@@ -208,8 +209,18 @@ class DataImputation:
         return df
 
     def impute_static_dataframe(self, df_static):
-        mean_column = ['AGE', 'HEIGHT', 'WEIGHT']
-        df_static = self.mean_impute(df_static, mean_column)
+
+        # mean imputation for continuous features
+        mean_columns = ['AGE', 'HEIGHT', 'WEIGHT']
+        df_static = self.mean_impute(df_static, mean_columns)
+
+        # impute discrete features with a unique number
+        discrete_columns = ['Gender', 'SecondHandSmoke', 'BedName', 'AnesthesiaType',
+                            'ASA', 'if_Emergency', 'Airway_1', 'Airway_2']
+        for column in discrete_columns:
+            df_static[[column]] = df_static[[column]].fillna(value=np.max(df_static[column].unique()) + 1)
+
+        # impute the rest with 0 padding
         df_static = df_static.fillna(value=0)
 
         return df_static
@@ -218,38 +229,42 @@ class DataImputation:
 
         # interpolate if gap is less than 10 timestep
         mask = df_dynamic[self.feat_name].copy()
+        df_dynamic_imp = df_dynamic.copy()
         for column in self.feat_name:
-            df = pd.DataFrame(df_dynamic[column])
+            df = pd.DataFrame(df_dynamic_imp[column])
             df['new'] = ((df.notnull() != df.shift().notnull()).cumsum())
             df['ones'] = 1
             mask[column] = (df.groupby('new')['ones'].transform('count')
-                            < self.missing_gap_thresh) | df_dynamic[column].notnull()
-        df_dynamic[self.feat_name] = df_dynamic[self.feat_name].interpolate().bfill()[mask]
+                            < self.missing_gap_thresh) | df_dynamic_imp[column].notnull()
+        df_dynamic_imp[self.feat_name] = df_dynamic_imp[self.feat_name].interpolate().bfill()[mask]
 
         # add dummy variables
         indicator = MissingIndicator(missing_values=np.nan, features='all')
-        X = df_dynamic[self.feat_name].values
+        X = df_dynamic_imp[self.feat_name].values
         if_missing = indicator.fit_transform(X)
         if_measured = 1 - if_missing.astype(int)
         dummy_names = []
         for ind, feat in enumerate(self.feat_name):
             dummy_name = 'if_' + feat
-            df_dynamic[dummy_name] = if_measured[:, ind]
+            df_dynamic_imp[dummy_name] = if_measured[:, ind]
             dummy_names.append(dummy_name)
 
         # impute missing invasive variables with 0 and add column "index"
-        df_dynamic = df_dynamic.fillna(value=0)
-        df_dynamic = df_dynamic.reindex(['index', 'pid', 'ts'] + self.feat_name + dummy_names, axis=1)
+        df_dynamic_imp = df_dynamic_imp.fillna(value=0)
+        df_dynamic_imp = df_dynamic_imp.reindex(['index', 'pid', 'ts'] + self.feat_name + dummy_names, axis=1)
 
-        return df_dynamic
+        return df_dynamic_imp
 
 
 class FeatureExtraction:
 
     def __init__(self, feature_window):
         feat_name = ['invDiastolic', 'invMeanBP', 'invSystolic', 'HR', 'Diastolic', 'MeanBP', 'Systolic', 'SpO2',
-                     'Pulse', 'ETCO2', 'Temp', 'coreTemp']
-        self.feat_use = feat_name
+                     'RespRate', 'PEEP', 'PIP', 'FiO2', 'TidalVolume', 'Pulse', 'ETCO2', 'O2Flow', 'AirFlow',
+                     'N2OFlow', 'Temp', 'coreTemp']
+        self.feat_use = ['invDiastolic', 'invMeanBP', 'invSystolic', 'HR', 'Diastolic', 'MeanBP', 'Systolic', 'SpO2',
+                         'RespRate', 'PEEP', 'PIP', 'TidalVolume', 'Pulse', 'ETCO2', 'O2Flow', 'AirFlow',
+                         'N2OFlow', 'Temp']
         self.sta_feature_columns = self.get_stat_feature_columns()
         self.ewm_feature_columns = self.get_ewm_feature_columns()
         self.feature_window = feature_window
@@ -365,18 +380,18 @@ class FeatureExtraction:
         dynamic_columns = df_dynamic.columns
         ewm_columns = self.ewm_feature_columns
 
-        df_seed = df_dynamic[self.feat_use].copy()
+        df_seed = df_dynamic[['pid'] + self.feat_use].copy()
         df = df_dynamic[['index', 'pid', 'ts']].copy()
 
-        df[ewm_columns[0:num_feat]] = df_seed
-        df[ewm_columns[num_feat:num_feat * 2]] = df_seed.rolling(window=self.feature_window).min()
-        df[ewm_columns[num_feat * 2:num_feat * 3]] = df_seed.rolling(window=self.feature_window).max()
-        df[ewm_columns[num_feat * 3:num_feat * 4]] = df_seed.ewm(halflife=0.1).mean()
-        df[ewm_columns[num_feat * 4:num_feat * 5]] = df_seed.ewm(halflife=1).mean()
-        df[ewm_columns[num_feat * 5:num_feat * 6]] = df_seed.ewm(halflife=5).mean()
-        df[ewm_columns[num_feat * 6:num_feat * 7]] = df_seed.ewm(halflife=10).mean()
-        df[ewm_columns[num_feat * 7:num_feat * 8]] = df_seed.ewm(halflife=5).var()
-        df[ewm_columns[num_feat * 8:num_feat * 9]] = df_seed.ewm(halflife=10).var()
+        df[ewm_columns[0:num_feat]] = df_seed.iloc[:, 1:]
+        df[ewm_columns[num_feat:num_feat * 2]] = df_seed.groupby(['pid']).rolling(window=self.feature_window).min().reset_index(level=0, drop=True).iloc[:, 1:]
+        df[ewm_columns[num_feat * 2:num_feat * 3]] = df_seed.groupby(['pid']).rolling(window=self.feature_window).max().reset_index(level=0, drop=True).iloc[:, 1:]
+        df[ewm_columns[num_feat * 3:num_feat * 4]] = df_seed.groupby(['pid']).transform(lambda x: x.ewm(halflife=0.1).mean())
+        df[ewm_columns[num_feat * 4:num_feat * 5]] = df_seed.groupby(['pid']).transform(lambda x: x.ewm(halflife=1).mean())
+        df[ewm_columns[num_feat * 5:num_feat * 6]] = df_seed.groupby(['pid']).transform(lambda x: x.ewm(halflife=5).mean())
+        df[ewm_columns[num_feat * 6:num_feat * 7]] = df_seed.groupby(['pid']).transform(lambda x: x.ewm(halflife=10).mean())
+        df[ewm_columns[num_feat * 7:num_feat * 8]] = df_seed.groupby(['pid']).transform(lambda x: x.ewm(halflife=5).var())
+        df[ewm_columns[num_feat * 8:num_feat * 9]] = df_seed.groupby(['pid']).transform(lambda x: x.ewm(halflife=10).var())
 
         df = df.fillna(value=0)
         # normalization
@@ -391,7 +406,8 @@ class FeatureExtraction:
             df = pd.concat([df, df_dummy], axis=1, sort=False)
 
         # add static features to each row
-        df = pd.merge(df, self.gen_static_features(df_static, feat_type=feat_type), on='pid')
+        static_features = self.gen_static_features(df_static, feat_type=feat_type)
+        df = pd.merge(df, static_features, on='pid')
 
         return df
 
@@ -450,8 +466,9 @@ class FeatureExtraction:
         :return:
         """
 
-        static_feat_use = ['pid', 'AGE', 'TimeOfDay', 'AnesthesiaDuration', 'ASA', 'if_Eergency', 'HEIGHT', 'WEIGHT',
-                           'Airway_1', 'Airway_1_Time', 'Airway_2', 'Airway_2_Time']
+        static_feat_use = ['pid', 'Gender', 'AGE', 'HEIGHT', 'WEIGHT', 'SecondHandSmoke', 'BedName', 'TimeOfDay',
+                           'AnesthesiaType', 'ASA', 'if_Emergency', 'Airway_1', 'Airway_1_Time', 'Airway_2',
+                           'Airway_2_Time', 'AnesthesiaDuration', 'EBL', 'Urine_Output']
         df = df_static[static_feat_use].copy()
 
         # normalization

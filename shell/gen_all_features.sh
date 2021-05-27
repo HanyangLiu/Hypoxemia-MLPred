@@ -5,8 +5,8 @@ export PYTHONPATH
 
 cd ..
 
-python feature_extraction.py --type static --static_txt bow
-python feature_extraction.py --type static --static_txt rbow
+#python feature_extraction.py --type static --static_txt bow
+#python feature_extraction.py --type static --static_txt rbow
 
 python feature_extraction.py --type dynamic-ewm --if_impute True --dynamic_txt notxt
 #python feature_extraction.py --type dynamic-ewm --if_impute True --dynamic_txt rbow
