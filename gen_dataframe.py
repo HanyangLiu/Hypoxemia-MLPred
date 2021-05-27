@@ -3,6 +3,7 @@
 import pandas as pd
 from utils.utility_parsing_raw import ParseDynamicData, ParseStaticData, ParseICD
 from file_config.config import config
+import json
 
 # path
 vitals_dir = config.get('data', 'vitals_dir')
@@ -15,7 +16,7 @@ df_dynamic_file = config.get('processed', 'df_dynamic_file')
 def gen_static_dataframe():
 
     # parse demographic data into DataFrame
-    print('Start parsing demographic...')
+    print('Start parsing static data...')
     static_parser = ParseStaticData(demographic_file)
     df_static = static_parser.gen_static_dataframe()
 
@@ -42,7 +43,10 @@ def gen_realtime_dataframe():
     # Parsing vital files into DataFrame
     print('Start parsing vitals...')
     anesthesia_start_time = static_parser.start_time_dict
-    df = dynamic_parser.parse_vitals(start_time_dict=anesthesia_start_time, id_converter=id_converter)
+    anesthesia_stop_time = static_parser.stop_time_dict
+    df = dynamic_parser.parse_vitals(start_time_dict=anesthesia_start_time,
+                                     stop_time_dict=anesthesia_stop_time,
+                                     id_converter=id_converter)
     df.to_csv(df_dynamic_file, index=False)  # save DataFrame to csv
     print('Finished generating real-time DataFrame!')
 

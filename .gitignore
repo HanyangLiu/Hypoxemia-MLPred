@@ -1,0 +1,9 @@
+data/data_frame/*
+data/raw_data/*
+data/features/*
+data/model/*
+data/result/*
+data/label/*
+data/*
+
+

@@ -5,17 +5,6 @@ from utils.utility_preprocess import FeatureExtraction, DataImputation
 import argparse
 
 
-def imputation(df_static, df_dynamic):
-    # Missing value imputation
-    print('Imputing missing values...')
-    imputer = DataImputation()
-    df_static = imputer.impute_static_dataframe(df_static)
-    df_dynamic = imputer.impute_dynamic_dataframe(df_dynamic) if args.if_impute == 'True' else df_dynamic
-    print('Done!')
-
-    return df_static, df_dynamic
-
-
 def feature_extraction(df_static, df_dynamic, type):
     # Feature extraction
     print('Extracting features...')
@@ -45,9 +34,9 @@ def feature_extraction(df_static, df_dynamic, type):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='feature extraction')
-    parser.add_argument('--type', type=str, default='dynamic-lstm')  # 'static' OR 'dynamic-ewm' OR 'dynamic-sta'
+    parser.add_argument('--type', type=str, default='static')  # 'static' OR 'dynamic-ewm' OR 'dynamic-sta'
     parser.add_argument('--if_impute', type=str, default='True')  # 'True' OR 'False'
-    parser.add_argument('--static_txt', type=str, default='bow')  # 'bow' OR 'rbow'
+    parser.add_argument('--static_txt', type=str, default='rbow')  # 'bow' OR 'rbow'
     parser.add_argument('--dynamic_txt', type=str, default='notxt')  # 'notxt' OR 'rbow'
     args = parser.parse_args()
     print(args)
@@ -68,8 +57,11 @@ if __name__ == '__main__':
     df_dynamic = pd.read_csv(df_dynamic_file)
 
     # feature extraction
-    df_static, df_dynamic = imputation(df_static, df_dynamic)
+    imputer = DataImputation()
+    df_static = imputer.impute_static_dataframe(df_static)
+    df_dynamic = imputer.impute_dynamic_dataframe(df_dynamic) if args.if_impute == 'True' else df_dynamic
     feature_extraction(df_static, df_dynamic, type=args.type)
+
 
 
 

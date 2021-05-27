@@ -24,10 +24,18 @@ def prepare_data(df_static, df_dynamic, dynamic_feature, args):
     imputer = DataImputation()
     df_static = imputer.impute_static_dataframe(df_static)
     df_dynamic = imputer.impute_dynamic_dataframe(df_dynamic)
+    path_sta_label = 'data/result/static_label.pkl'
+    path_dyn_label = 'data/result/dynamic_label.pkl'
     label_assign = LabelAssignment(hypoxemia_thresh=args.hypoxemia_thresh,
                                    hypoxemia_window=args.hypoxemia_window,
                                    prediction_window=args.prediction_window)
-    static_label, dynamic_label = label_assign.assign_label(df_static, df_dynamic)
+    # print('Assigning labels...')
+    # static_label, dynamic_label = label_assign.assign_label(df_static, df_dynamic)
+    # static_label.to_pickle(path_sta_label)
+    # dynamic_label.to_pickle(path_dyn_label)
+
+    static_label = pd.read_pickle(path_sta_label)
+    dynamic_label = pd.read_pickle(path_dyn_label)
     positive_pids = label_assign.get_positive_pids(static_label)
     print('Done.')
 
@@ -39,10 +47,6 @@ def prepare_data(df_static, df_dynamic, dynamic_feature, args):
                                                'P27.9', 'J44', 'V46.1', 'Z99.1'],  # High-risk group
                                   exclude_icd9=['745', '746', '747'],
                                   exclude_icd10=['Q20', 'Q21', 'Q22', 'Q23', 'Q24', 'Q25', 'Q26']).filter_by_icd()
-
-    # exclude patients from OR14 and CCL "bedname"
-    exclude_list = df_static[df_static['BedName'].isin([14., 23., 24])]['pid'].values.tolist()
-    subgroup_pids = list(set(subgroup_pids) - set(exclude_list))
 
     # split subgroup pids into training and test pid set
     pid_train, pid_test, _, _ = train_test_split(static_label.loc[subgroup_pids]['pid'].values,
@@ -98,34 +102,6 @@ def prepare_data(df_static, df_dynamic, dynamic_feature, args):
     return X_train, X_test, y_train, y_test, pos_rate
 
 
-def train_gbtree(X_train, y_train, pos_rate, args):
-    # Training
-    print('Training model...')
-    if args.gb_tool == 'xgboost':
-        model = XGBClassifier(objective='binary:logistic',
-                              booster='gbtree',
-                              learning_rate=0.05,
-                              n_estimators=200,
-                              max_depth=3,
-                              min_child_weight=6,
-                              verbosity=1
-                              )
-    else:
-        model = CatBoostClassifier(verbose=0,
-                                   # scale_pos_weight=(1 - pos_rate) / pos_rate,
-                                   learning_rate=args.lr,
-                                   depth=args.depth,
-                                   l2_leaf_reg=args.l2
-                                   )
-
-    model.fit(X_train, y_train)
-    params = model.get_params() if args.gb_tool == 'xgboost' else model.get_all_params()
-    print('Parameters:', params)
-    print('Done.')
-
-    return model
-
-
 def param_tuning(X_train, y_train):
 
     # shuffle X and y
@@ -133,18 +109,14 @@ def param_tuning(X_train, y_train):
                                random_state=0
                                )
     print('Searching best parameters...')
-    if args.gb_tool == 'xgboost':
-        model = XGBClassifier(objective='binary:logistic', booster='gbtree')
-        param_dist = {"max_depth": [3],
-                      "min_child_weight": [6],
-                      "n_estimators": [100, 200, 1000],
-                      "learning_rate": [0.05, 0.3]}
-    else:
-        model = CatBoostClassifier(verbose=0)
-        param_dist = {'depth': [3, 6, 9],
-                      'learning_rate': [0.01, 0.02, 0.05],
-                      'l2_leaf_reg': [1, 3, 6],
-                      }
+
+    model = CatBoostClassifier(verbose=0)
+    param_dist = {
+        'depth': [3, 6, 9],
+        'learning_rate': [0.01, 0.02, 0.05],
+        'l2_leaf_reg': [1, 3, 6],
+        }
+
     grid_search = GridSearchCV(model,
                                param_grid=param_dist,
                                cv=3,
@@ -205,56 +177,6 @@ def evaluate(model, X_test, y_test, pos_rate, args):
     return metrics.auc(rec, prec)
 
 
-def model_explain(model, data_to_predict):
-
-    explainer = shap.TreeExplainer(model)
-    shap_values = explainer.shap_values(data_to_predict)
-    # shap.summary_plot(shap_values, data_to_predict, plot_type="bar")
-    vals = np.abs(shap_values).mean(0)
-    feature_importance = pd.DataFrame(list(zip(X_train.columns, vals)), columns=['col_name', 'feature_importance_vals'])
-    feature_importance.sort_values(by=['feature_importance_vals'], ascending=False, inplace=True)
-    d_sum = dict()
-    for col_name in feature_importance['col_name'].values:
-        feat_name = col_name.split('-')[0]
-        if feat_name not in d_sum:
-            d_sum[feat_name] = [feature_importance[feature_importance['col_name'] == col_name]['feature_importance_vals'].values[0]]
-        else:
-            d_sum[feat_name].append(feature_importance[feature_importance['col_name'] == col_name]['feature_importance_vals'].values[0])
-
-    for key in d_sum.keys():
-        d_sum[key] = np.sum(d_sum[key])
-
-    importance = pd.DataFrame(list(zip(d_sum.keys(), d_sum.values())), columns=['Feature', 'Feature Importance'])
-    importance.sort_values(by=['Feature Importance'], ascending=False, inplace=True)
-    importance.set_index('Feature', inplace=True)
-
-    fig = plt.figure(figsize=(7, 5))
-    ax = fig.add_subplot()
-    # set width of bar
-    barWidth = 0.5
-
-    # set height of bar
-    bars1 = list(importance[0:20]['Feature Importance'].values)
-
-    # Set position of bar on X axis
-    r1 = np.arange(len(bars1))
-
-    # Make the plot
-    plt.bar(r1, bars1, width=barWidth, edgecolor='white', label='Intraoperative Features')
-
-    # Add xticks on the middle of the group bars
-    plt.xticks([r for r in range(len(bars1))], list(importance[0:20].index))
-    fig.autofmt_xdate(rotation=45)
-    # plt.xlabel('Feature', fontweight='bold')
-    plt.ylabel('Feature Importance', fontweight='bold')
-    # plt.title('Feature Importance of Intraoperative Model')
-
-    # Create legend & Show graphic
-    plt.legend()
-    plt.savefig('data/result/feat_importance.pdf')
-    plt.show()
-
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='hypoxemia prediction')
     parser.add_argument('--hypoxemia_thresh', type=int, default=90)
@@ -263,8 +185,6 @@ if __name__ == "__main__":
     parser.add_argument('--filter_mode', type=str, default='exclude')
     parser.add_argument('--feature_file', type=str, default='dynamic-ewm-notxt-nonimp.csv')
     parser.add_argument('--random_state', type=int, default=1)
-    parser.add_argument('--gb_tool', type=str, default='catboost')
-    parser.add_argument('--if_tuning', type=str, default='True')
     parser.add_argument('--n_jobs', type=int, default=-1)
 
     parser.add_argument('--lr', type=float, default=0.02)
@@ -278,10 +198,9 @@ if __name__ == "__main__":
                                                               dynamic_feature=pd.read_csv('data/features/' + args.feature_file),
                                                               args=args)
 
-    model = param_tuning(X_train, y_train) if args.if_tuning == 'True' else train_gbtree(X_train, y_train, pos_rate, args)
+    model = param_tuning(X_train, y_train)
     pickle.dump(model, open(config.get('processed', 'realtime_model_file'), 'wb'))
     evaluate(model, X_test, y_test, pos_rate, args)
-    model_explain(model, X_test)
 
 
 
